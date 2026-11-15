@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>جرد المخزون</title>
+<style>
+:root{--bg:#111827;--card:#1f2937;--tx:#f9fafb;--mut:#9ca3af;--ok:#16a34a;--bad:#dc2626;--warn:#d97706;--pri:#2563eb}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--tx);font-family:Arial,Tahoma,sans-serif}
+body{padding:env(safe-area-inset-top) 12px env(safe-area-inset-bottom);max-width:560px;margin:0 auto}
+.hide{display:none!important}
+h1{font-size:20px;margin:14px 0}
+input,button{font:inherit}
+input[type=text],input[type=password],input[type=number]{width:100%;padding:14px;border-radius:12px;border:1px solid #374151;background:var(--card);color:var(--tx);font-size:18px}
+button{border:0;border-radius:12px;padding:12px 14px;background:#374151;color:var(--tx);font-size:16px;cursor:pointer}
+button.pri{background:var(--pri)}
+button.on{background:var(--pri)}
+button.danger{background:var(--bad)}
+.row{display:flex;gap:8px;align-items:center;margin:8px 0}
+.row>*{flex:1}
+.bar{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--mut);padding:8px 0}
+.cam{position:relative;background:#000;border-radius:14px;overflow:hidden;aspect-ratio:4/3}
+.cam video{width:100%;height:100%;object-fit:cover}
+.frame{position:absolute;inset:25% 8%;border:2px solid rgba(255,255,255,.7);border-radius:10px;pointer-events:none}
+#flash{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .25s}
+#res{margin:8px 0;padding:12px;border-radius:12px;background:var(--card);min-height:64px}
+#res b{font-size:18px;word-break:break-all}
+#res small{display:block;color:var(--mut);margin-top:4px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{padding:8px 14px;border-radius:999px;background:#374151;font-size:15px}
+.chip.on{background:var(--pri)}
+.seg button{padding:14px;font-size:18px}
+#list{margin:8px 0 24px}
+.it{background:var(--card);border-radius:10px;padding:10px;margin:6px 0;font-size:14px;border-inline-start:5px solid var(--ok)}
+.it.warn{border-color:var(--warn)}.it.bad{border-color:var(--bad)}.it.wait{opacity:.7}
+.it .v{font-weight:bold;word-break:break-all}.it .m{color:var(--mut);font-size:12px}
+.cats label{display:flex;gap:10px;align-items:center;padding:8px;background:var(--card);border-radius:10px;margin:4px 0}
+.cats input{width:22px;height:22px}
+.modal{position:fixed;inset:0;background:var(--bg);overflow:auto;padding:12px;z-index:9}
+.note{color:var(--mut);font-size:13px;margin:6px 0}
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<section id="login">
+  <h1>جرد المخزون</h1>
+  <p class="note">اكتب رقم الموظف (ID) عشان تبدأ.</p>
+  <input id="empIn" type="text" inputmode="text" autocomplete="off" placeholder="رقم الموظف">
+  <div class="row"><button class="pri" id="goBtn">دخول</button></div>
+  <div class="row"><button id="adminBtn0">أدمن</button></div>
+  <p id="loginMsg" class="note"></p>
+</section>
+
+<!-- Category picker -->
+<section id="pick" class="hide">
+  <h1>اختار الكاتيجوري اللي هتجرده</h1>
+  <p class="note" id="pickNote"></p>
+  <div class="chips" id="pickChips"></div>
+  <div class="row"><button id="pickAll">الكل</button><button class="pri" id="pickGo">ابدأ الجرد</button></div>
+</section>
+
+<!-- Main -->
+<section id="main" class="hide">
+  <div class="bar">
+    <span>الموظف: <b id="empLbl"></b> · <a href="#" id="outBtn" style="color:var(--mut)">خروج</a></span>
+    <span id="syncLbl"></span>
+  </div>
+  <div class="note"><span id="scopeLbl"></span> · <a href="#" id="chgCat" style="color:#93c5fd">غيّر</a></div>
+
+  <div class="cam">
+    <video id="vid" playsinline muted></video>
+    <div class="frame"></div>
+    <div id="flash"></div>
+  </div>
+  <div class="row">
+    <button id="camBtn">إيقاف الكاميرا</button>
+    <button id="torchBtn">كشاف</button>
+  </div>
+
+  <div id="res"><span class="note">وجّه الكاميرا على الباركود</span></div>
+
+  <div class="row seg">
+    <button id="mCode">كود</button>
+    <button id="mSerial">سيريال</button>
+  </div>
+
+  <div class="note">الكمية للسكان الجاي (ترجع 1 بعد كل سكان)</div>
+  <div class="chips" id="qtyChips"></div>
+  <div class="row">
+    <input id="qtyCustom" type="number" inputmode="numeric" min="1" placeholder="كمية تانية">
+    <button id="keepBtn">ثبّت الكمية</button>
+  </div>
+
+  <div class="row">
+    <input id="manual" type="text" autocomplete="off" placeholder="اكتب الكود/السيريال واضغط Enter">
+    <button id="addBtn" style="flex:0 0 auto">+</button>
+  </div>
+  <div class="row"><button id="againBtn">+ كرر آخر سكان</button><button id="undoBtn" class="danger">↩ تراجع</button></div>
+  <div class="row"><button id="adminBtn">أدمن</button></div>
+
+  <div id="list"></div>
+</section>
+
+<!-- Admin -->
+<section id="admin" class="modal hide">
+  <h1>الأدمن</h1>
+  <div id="pinBox">
+    <input id="pin" type="password" inputmode="numeric" placeholder="PIN">
+    <div class="row"><button class="pri" id="pinOk">فتح</button><button id="admClose0">رجوع</button></div>
+  </div>
+  <div id="admBox" class="hide">
+    <h3>1) رفع شيت السيستم اليومي (xlsx)</h3>
+    <p class="note" id="stockAt"></p>
+    <p class="note">كل يوم ارفع الملف الجديد: بيستبدل القديم، فالمباع من الفرع بيختفي.</p>
+    <input id="file" type="file" accept=".xlsx,.xls">
+    <div class="row"><button class="pri" id="upBtn">رفع واستيراد</button></div>
+
+    <h3>2) الكاتيجوريز المسموحة للجرد (Item Class 6)</h3>
+    <div class="row"><button id="catAll">الكل</button><button id="catNone">مسح الكل</button></div>
+    <div id="cats" class="cats" style="max-height:45vh;overflow:auto"></div>
+    <div class="row"><button class="pri" id="saveCats">حفظ الكاتيجوريز</button></div>
+
+    <h3>3) أدوات</h3>
+    <div class="row"><button id="refBtn">تحديث المقارنة</button></div>
+    <div class="row"><button class="pri" id="wkBtn">إغلاق الأسبوع وحفظ في History</button></div>
+    <div class="row"><button class="danger" id="clrBtn">مسح كل السكانات</button></div>
+    <div class="row"><button id="admClose">رجوع</button></div>
+  </div>
+  <p id="admMsg" class="note"></p>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+<script>
+/* ====== SETTINGS ====== */
+const API_URL = 'https://script.google.com/macros/s/AKfycbzsFf32uhyuCmASc77gbTOO_vVR2MwIUO1IkP_cIZC_P_3R33zr5N7dHTYAyi-nDxmlNA/exec';   // Apps Script web app URL (ends with /exec)
+const SAME_CODE_GAP = 600;                  // ms the code must leave the view before the same code counts again
+const MIN_GAP = 300;                        // ms between two different codes
+
+/* ====== helpers ====== */
+const $ = id => document.getElementById(id);
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+};
+async function apiPost(body) {
+  const r = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
+  return r.json();
+}
+async function apiGet(q) {
+  const r = await fetch(API_URL + '?' + q);
+  return r.json();
+}
+
+/* ====== state ====== */
+let emp = LS.get('emp', '');
+let mode = LS.get('mode', 'code');
+let qty = 1, keepQty = false;
+let cat = LS.get('cat', null);
+let myCats = LS.get('myCats', []);
+const catLabel = c => c === '(No category)' ? 'بدون كاتيجوري' : c;
+let queue = LS.get('queue', []);
+let undoQ = LS.get('undoQ', []);
+let seenSerials = LS.get('seenSerials', {});
+let recent = [];
+let sending = false, lastScan = null;
+
+const STATUS = {
+  'OK': ['تمام', ''],
+  'Not in system': ['مش موجود في السيستم', 'bad'],
+  'Out of scope': ['خارج الكاتيجوري المحدد', 'warn'],
+  'Other category': ['من كاتيجوري تانية غير اللي اخترتها (اتحسب)', 'warn'],
+  'Duplicate serial': ['سيريال متكرر (اتسكن قبل كده)', 'warn'],
+  'Needs serial': ['الصنف ده بسيريال: اسكان السيريال', 'warn']
+};
+
+/* ====== catalog ====== */
+function indexCat(c) {
+  c.byId = {}; c.bySerial = {};
+  c.items.forEach(it => {
+    c.byId[it.i.toUpperCase()] = it;
+    it.s.forEach(s => {
+      const ent = { item: it, s: s };
+      c.bySerial[s.toUpperCase()] = ent;
+      s.split(' - ').forEach(p => { p = p.trim().toUpperCase(); if (p && !c.bySerial[p]) c.bySerial[p] = ent; });
+    });
+  });
+  return c;
+}
+async function loadCatalog() {
+  try {
+    const c = await apiGet('action=catalog');
+    if (c.ok) { cat = c; LS.set('cat', c); }
+  } catch (e) { /* offline: use cached */ }
+  if (cat) indexCat(cat);
+  renderScope();
+}
+function renderScope() {
+  if (!cat) { $('scopeLbl').textContent = 'مفيش بيانات: اتأكد من النت'; return; }
+  const mine = myCats.length ? myCats : cat.active;
+  $('scopeLbl').textContent = 'الجرد على: ' + (mine.length === cat.categories.length ? 'كل الكاتيجوريز' : mine.map(catLabel).join('، '));
+}
+
+/* ====== resolve (local, instant feedback; server is the source of truth) ====== */
+function resolve(type, value) {
+  const key = value.trim().toUpperCase();
+  let item = null, ser = null;
+  if (type === 'serial') { ser = cat.bySerial[key]; if (!ser) item = cat.byId[key]; }
+  else { item = cat.byId[key]; if (!item) ser = cat.bySerial[key]; }
+  if (ser) item = ser.item;
+  if (!item) return { status: 'Not in system' };
+  const r = { item, serial: ser ? ser.s : '', status: 'OK', qty: 1 };
+  if (ser) {
+    if (seenSerials[ser.s.toUpperCase()]) { r.status = 'Duplicate serial'; r.qty = 0; }
+  } else if (item.s.length) { r.status = 'Needs serial'; r.qty = 0; }
+  if (r.status === 'OK' && cat.active.indexOf(item.c) < 0) r.status = 'Out of scope';
+  if (r.status === 'OK' && myCats.length && myCats.indexOf(item.c) < 0) r.status = 'Other category';
+  return r;
+}
+
+/* ====== feedback ====== */
+let actx = null;
+function beep(freq, ms) {
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.frequency.value = freq; g.gain.value = 0.15;
+    o.connect(g); g.connect(actx.destination); o.start(); o.stop(actx.currentTime + ms / 1000);
+  } catch (e) {}
+}
+function feedback(kind) {
+  const f = $('flash');
+  f.style.background = kind === 'bad' ? '#dc2626' : kind === 'warn' ? '#d97706' : '#16a34a';
+  f.style.opacity = .45; setTimeout(() => f.style.opacity = 0, 160);
+  if (navigator.vibrate) navigator.vibrate(kind === '' ? 40 : [80, 60, 80]);
+  beep(kind === '' ? 1000 : 300, kind === '' ? 90 : 220);
+}
+
+/* ====== scanning ====== */
+function handleScan(value, qOverride) {
+  value = String(value || '').trim();
+  if (!value || !cat) return;
+  const q = qOverride || qty;
+  const r = resolve(mode, value);
+  const id = Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+  const finalQty = r.status === 'Duplicate serial' || r.status === 'Needs serial' ? 0 : (r.serial ? 1 : q);
+  const entry = { id, ts: Date.now(), type: mode, value, qty: q };
+  queue.push(entry); LS.set('queue', queue);
+  if (r.serial && r.status !== 'Duplicate serial') { seenSerials[r.serial.toUpperCase()] = 1; LS.set('seenSerials', seenSerials); }
+  const kind = STATUS[r.status][1];
+  feedback(kind);
+  const row = { id, serial: r.serial || '', value, desc: r.item ? r.item.d : '', qty: finalQty, status: r.status, kind, wait: true, mode };
+  recent.unshift(row); if (recent.length > 40) recent.pop();
+  lastScan = { value, type: mode };
+  showRes(row, r);
+  renderList();
+  if (!keepQty) { qty = 1; renderQty(); }
+  flush();
+}
+function showRes(row, r) {
+  const col = row.kind === 'bad' ? '#dc2626' : row.kind === 'warn' ? '#d97706' : '#16a34a';
+  $('res').style.borderInlineStart = '6px solid ' + col;
+  $('res').innerHTML = '<b>' + esc(row.value) + '</b> × ' + row.qty +
+    '<small>' + esc(row.desc || '') + (r.serial ? ' · ' + esc(r.serial) : '') + '</small>' +
+    '<small style="color:' + col + '">' + STATUS[row.status][0] + '</small>';
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function renderList() {
+  $('list').innerHTML = recent.map(r =>
+    '<div class="it ' + r.kind + (r.wait ? ' wait' : '') + '"><div class="v">' + esc(r.value) + ' × ' + r.qty + '</div>' +
+    '<div class="m">' + esc(r.desc) + '</div><div class="m">' + STATUS[r.status][0] + (r.wait ? ' · في انتظار الإرسال' : ' · اتبعت ✓') + '</div></div>').join('');
+  const pend = queue.length + undoQ.length;
+  $('syncLbl').textContent = pend ? 'في الانتظار: ' + pend : 'متزامن ✓';
+}
+
+/* ====== sending (queued, works with weak signal) ====== */
+function undoLast() {
+  const row = recent.find(x => !x.undone);
+  if (!row) return;
+  row.undone = true;
+  recent = recent.filter(x => x !== row);
+  if (row.serial) { delete seenSerials[row.serial.toUpperCase()]; LS.set('seenSerials', seenSerials); }
+  const inQ = queue.some(q => q.id === row.id);
+  if (inQ && !sending) { queue = queue.filter(q => q.id !== row.id); LS.set('queue', queue); }
+  else { undoQ.push(row.id); LS.set('undoQ', undoQ); }
+  $('res').innerHTML = '<span class="note">اتلغى آخر سكان: ' + esc(row.value) + '</span>';
+  if (navigator.vibrate) navigator.vibrate(40);
+  renderList(); flush();
+}
+async function flush() {
+  if (sending || !emp || (!queue.length && !undoQ.length)) return;
+  sending = true;
+  const batch = queue.slice(0, 40);
+  try {
+    if (batch.length) {
+    const r = await apiPost({ action: 'scan', emp, scans: batch });
+    if (!r.ok) throw new Error(r.error || 'error');
+    const done = {};
+    r.results.forEach(x => { done[x.id] = x; });
+    queue = queue.filter(q => !done[q.id] && !batch.some(b => b.id === q.id));
+    LS.set('queue', queue);
+    recent.forEach(row => {
+      const x = done[row.id];
+      if (x) {
+        row.wait = false;
+        if (x.status !== row.status && !(row.status === 'Other category' && x.status === 'OK')) { row.status = x.status; row.kind = STATUS[x.status] ? STATUS[x.status][1] : 'warn'; row.qty = x.qty; }
+      }
+    });
+    }
+    if (undoQ.length) {
+      const ids = undoQ.slice();
+      const u = await apiPost({ action: 'undo', emp, ids });
+      if (!u.ok) throw new Error(u.error || 'error');
+      undoQ = undoQ.filter(i => ids.indexOf(i) < 0); LS.set('undoQ', undoQ);
+    }
+    sending = false; renderList();
+    if (queue.length || undoQ.length) flush();
+  } catch (e) {
+    sending = false; renderList();
+    setTimeout(flush, 4000);
+  }
+}
+window.addEventListener('online', flush);
+
+/* ====== camera ====== */
+let reader = null, camOn = false, lastText = '', lastSeen = 0, lastAcc = 0, torch = false;
+function onDetect(text) {
+  const now = Date.now();
+  if (text === lastText) {
+    const wasAway = now - lastSeen > SAME_CODE_GAP;
+    lastSeen = now;
+    if (!wasAway) return;
+  } else if (now - lastAcc < MIN_GAP) { return; }
+  lastText = text; lastSeen = now; lastAcc = now;
+  handleScan(text);
+}
+async function startCam() {
+  if (camOn || typeof ZXing === 'undefined') return;
+  const hints = new Map();
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+    ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
+    ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.DATA_MATRIX
+  ]);
+  reader = new ZXing.BrowserMultiFormatReader(hints, 60);
+  try {
+    await reader.decodeFromConstraints(
+      { audio: false, video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } },
+      $('vid'),
+      (result) => { if (result) onDetect(result.getText()); else lastSeen = lastSeen; }
+    );
+    camOn = true; $('camBtn').textContent = 'إيقاف الكاميرا';
+  } catch (e) {
+    $('res').innerHTML = '<span class="note">الكاميرا مش شغالة: اسمح بصلاحية الكاميرا، أو اكتب الكود يدوي.</span>';
+    camOn = false; $('camBtn').textContent = 'تشغيل الكاميرا';
+  }
+}
+function stopCam() { if (reader) { try { reader.reset(); } catch (e) {} } camOn = false; $('camBtn').textContent = 'تشغيل الكاميرا'; }
+async function toggleTorch() {
+  try {
+    const t = $('vid').srcObject.getVideoTracks()[0];
+    torch = !torch;
+    await t.applyConstraints({ advanced: [{ torch }] });
+    $('torchBtn').classList.toggle('on', torch);
+  } catch (e) { $('res').innerHTML = '<span class="note">الكشاف مش مدعوم على الجهاز ده.</span>'; torch = false; }
+}
+
+/* ====== UI wiring ====== */
+function renderMode() {
+  $('mCode').classList.toggle('on', mode === 'code');
+  $('mSerial').classList.toggle('on', mode === 'serial');
+  LS.set('mode', mode);
+}
+function renderQty() {
+  const opts = [1, 2, 3, 5, 10];
+  $('qtyChips').innerHTML = opts.map(n => '<span class="chip' + (qty === n ? ' on' : '') + '" data-q="' + n + '">' + n + '</span>').join('');
+  $('keepBtn').classList.toggle('on', keepQty);
+  $('keepBtn').textContent = keepQty ? 'الكمية مثبتة' : 'ثبّت الكمية';
+}
+$('qtyChips').addEventListener('click', e => { const q = e.target.dataset.q; if (q) { qty = Number(q); renderQty(); } });
+$('qtyCustom').addEventListener('input', e => { const n = Math.floor(Number(e.target.value)); if (n >= 1) { qty = n; renderQty(); } });
+$('keepBtn').onclick = () => { keepQty = !keepQty; renderQty(); };
+$('mCode').onclick = () => { mode = 'code'; renderMode(); };
+$('mSerial').onclick = () => { mode = 'serial'; renderMode(); };
+$('camBtn').onclick = () => camOn ? stopCam() : startCam();
+$('torchBtn').onclick = toggleTorch;
+$('addBtn').onclick = () => { const v = $('manual').value; $('manual').value = ''; handleScan(v); };
+$('manual').addEventListener('keydown', e => { if (e.key === 'Enter') $('addBtn').click(); });
+$('undoBtn').onclick = undoLast;
+$('againBtn').onclick = () => { if (lastScan) { const m = mode; mode = lastScan.type; handleScan(lastScan.value); mode = m; } };
+
+function enter() {
+  $('login').classList.add('hide');
+  $('empLbl').textContent = emp;
+  loadCatalog().then(() => {
+    if (!cat) { $('loginMsg').textContent = 'مفيش بيانات: اتأكد من النت'; $('login').classList.remove('hide'); return; }
+    showPick(); flush();
+  });
+}
+function showPick() {
+  stopCam();
+  $('main').classList.add('hide'); $('pick').classList.remove('hide');
+  myCats = myCats.filter(c => cat.active.indexOf(c) >= 0);
+  const cnt = {}; cat.categories.forEach(c => { cnt[c.name] = c.count; });
+  $('pickNote').textContent = 'اختار كاتيجوري واحد أو أكتر. آخر استوك: ' + (cat.stockAt || 'غير معروف');
+  $('pickChips').innerHTML = cat.active.map(c =>
+    '<span class="chip' + (myCats.indexOf(c) >= 0 ? ' on' : '') + '" data-c="' + esc(c) + '">' + esc(catLabel(c)) + ' (' + (cnt[c] || 0) + ')</span>').join('');
+}
+$('pickChips').addEventListener('click', e => {
+  const c = e.target.dataset.c; if (!c) return;
+  const i = myCats.indexOf(c); if (i >= 0) myCats.splice(i, 1); else myCats.push(c);
+  e.target.classList.toggle('on');
+});
+$('pickAll').onclick = () => { myCats = cat.active.slice(); showPick(); };
+$('pickGo').onclick = () => {
+  if (!myCats.length) myCats = cat.active.slice();
+  LS.set('myCats', myCats);
+  $('pick').classList.add('hide'); $('main').classList.remove('hide');
+  renderMode(); renderQty(); renderList(); renderScope(); startCam();
+};
+$('chgCat').onclick = e => { e.preventDefault(); showPick(); };
+setInterval(() => { if (emp && navigator.onLine) loadCatalog(); }, 15 * 60 * 1000);
+$('goBtn').onclick = () => {
+  const v = $('empIn').value.trim();
+  if (!v) { $('loginMsg').textContent = 'اكتب رقم الموظف'; return; }
+  emp = v; LS.set('emp', emp); enter();
+};
+$('empIn').addEventListener('keydown', e => { if (e.key === 'Enter') $('goBtn').click(); });
+$('outBtn').onclick = e => { e.preventDefault(); stopCam(); emp = ''; LS.set('emp', ''); $('main').classList.add('hide'); $('pick').classList.add('hide'); $('login').classList.remove('hide'); };
+
+/* ====== admin ====== */
+let adminPin = '';
+function openAdmin() { $('admin').classList.remove('hide'); $('pinBox').classList.remove('hide'); $('admBox').classList.add('hide'); $('admMsg').textContent = ''; }
+function closeAdmin() { $('admin').classList.add('hide'); }
+$('adminBtn').onclick = openAdmin; $('adminBtn0').onclick = openAdmin;
+$('admClose').onclick = closeAdmin; $('admClose0').onclick = closeAdmin;
+$('pinOk').onclick = async () => {
+  adminPin = $('pin').value;
+  $('admMsg').textContent = 'جاري التحقق...';
+  try {
+    const r = await apiPost({ action: 'refresh', pin: adminPin });
+    if (!r.ok) throw new Error(r.error);
+    $('pinBox').classList.add('hide'); $('admBox').classList.remove('hide'); $('admMsg').textContent = '';
+    await loadCatalog(); renderCats();
+  } catch (e) { $('admMsg').textContent = 'PIN غلط أو مفيش اتصال'; }
+};
+function renderCats() {
+  if (!cat) return;
+  $('stockAt').textContent = 'آخر استيراد استوك: ' + (cat.stockAt || 'لسه محصلش');
+  $('cats').innerHTML = cat.categories.map(c =>
+    '<label><input type="checkbox" value="' + esc(c.name) + '"' + (cat.active.indexOf(c.name) >= 0 ? ' checked' : '') + '> ' + esc(catLabel(c.name)) + ' (' + c.count + ')</label>').join('');
+}
+$('catAll').onclick = () => $('cats').querySelectorAll('input').forEach(i => { i.checked = true; });
+$('catNone').onclick = () => $('cats').querySelectorAll('input').forEach(i => { i.checked = false; });
+$('saveCats').onclick = async () => {
+  const list = Array.from($('cats').querySelectorAll('input:checked')).map(i => i.value);
+  $('admMsg').textContent = 'جاري الحفظ...';
+  try {
+    const r = await apiPost({ action: 'setActive', pin: adminPin, categories: list });
+    if (!r.ok) throw new Error(r.error);
+    await loadCatalog(); $('admMsg').textContent = 'اتحفظت ✓ (' + (list.length || 'كل') + ' كاتيجوري)';
+  } catch (e) { $('admMsg').textContent = 'حصل خطأ: ' + e.message; }
+};
+$('upBtn').onclick = () => {
+  const f = $('file').files[0];
+  if (!f) { $('admMsg').textContent = 'اختار الملف الأول'; return; }
+  $('admMsg').textContent = 'جاري الرفع والاستيراد... (ممكن ياخد نص دقيقة)';
+  const fr = new FileReader();
+  fr.onload = async () => {
+    try {
+      const r = await apiPost({ action: 'import', pin: adminPin, name: f.name, b64: String(fr.result).split(',')[1] });
+      if (!r.ok) throw new Error(r.error);
+      await loadCatalog(); renderCats();
+      $('admMsg').textContent = 'تم ✓ ' + r.summary.items + ' صنف، منهم ' + r.summary.serialItems + ' بسيريال، ' + r.summary.categories + ' كاتيجوري';
+    } catch (e) { $('admMsg').textContent = 'فشل الاستيراد: ' + e.message; }
+  };
+  fr.readAsDataURL(f);
+};
+$('refBtn').onclick = async () => {
+  try { const r = await apiPost({ action: 'refresh', pin: adminPin }); $('admMsg').textContent = r.ok ? 'المقارنة اتحدثت ✓' : r.error; } catch (e) { $('admMsg').textContent = 'مفيش اتصال'; }
+};
+$('wkBtn').onclick = async () => {
+  if (!confirm('هتحفظ مقارنة وسكانات الأسبوع في History وتفضّي تاب Scans للأسبوع الجديد. متأكد؟')) return;
+  $('admMsg').textContent = 'جاري الحفظ...';
+  try {
+    const r = await apiPost({ action: 'closeWeek', pin: adminPin, clear: true });
+    if (!r.ok) throw new Error(r.error);
+    const m = r.summary;
+    seenSerials = {}; LS.set('seenSerials', {}); recent = []; renderList();
+    $('admMsg').textContent = 'اتحفظ أسبوع ' + m.week + ' ✓ (' + m.rows + ' صف: تمام ' + m.match + '، ناقص ' + m.missing + '، زيادة ' + m.over + ')';
+  } catch (e) { $('admMsg').textContent = 'فشل: ' + e.message; }
+};
+$('clrBtn').onclick = async () => {
+  if (!confirm('هتمسح كل السكانات من الشيت. متأكد؟')) return;
+  try {
+    const r = await apiPost({ action: 'clearScans', pin: adminPin });
+    if (r.ok) { seenSerials = {}; LS.set('seenSerials', {}); recent = []; renderList(); }
+    $('admMsg').textContent = r.ok ? 'اتمسحت ✓' : r.error;
+  } catch (e) { $('admMsg').textContent = 'مفيش اتصال'; }
+};
+
+/* ====== boot ====== */
+if (cat) indexCat(cat);
+if (emp) enter();
+</script>
+</body>
+</html>
