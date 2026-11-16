@@ -230,10 +230,10 @@ function indexCat(c) {
 async function loadCatalog() {
   try {
     const c = await apiGet('action=catalog');
-    if (c.ok) { cat = c; LS.set('cat', c); }
+    if (c && c.ok && Array.isArray(c.rules)) { cat = c; LS.set('cat', c); }
   } catch (e) { /* offline: use cached */ }
-  if (cat) indexCat(cat);
-  renderScope();
+  if (cat && Array.isArray(cat.rules)) { indexCat(cat); renderScope(); }
+  else { cat = null; }
 }
 function renderScope() {
   if (!cat || !cat.rules) { $('scopeLbl').textContent = 'مفيش بيانات: اتأكد من النت'; return; }
