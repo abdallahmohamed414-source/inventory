@@ -236,7 +236,7 @@ async function loadCatalog() {
   renderScope();
 }
 function renderScope() {
-  if (!cat) { $('scopeLbl').textContent = 'مفيش بيانات: اتأكد من النت'; return; }
+  if (!cat || !cat.rules) { $('scopeLbl').textContent = 'مفيش بيانات: اتأكد من النت'; return; }
   const sel = cat.rules.filter(r => myRules.indexOf(ruleKey(r)) >= 0);
   $('scopeLbl').textContent = 'جرد ' + DAY_AR[cat.day] + ': ' + (sel.length ? sel : cat.rules).map(ruleLabel).join('، ');
 }
