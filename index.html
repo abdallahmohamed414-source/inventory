@@ -165,6 +165,7 @@ button:disabled{opacity:.5}
     <div class="row"><select id="selIc" aria-label="Inventory Class"></select></div>
     <div class="row"><select id="selC8" aria-label="Class 8"></select></div>
     <div class="row"><input id="selKw" type="text" placeholder="كلمة في اسم الصنف (اختياري) مثلًا DEVIA"></div>
+    <p class="note" id="ruleHint"></p>
     <div class="row"><button id="addRule">+ إضافة لليوم المحدد</button><button class="pri" id="saveSched">حفظ الجدول</button></div>
 
     <h3>3) ربط الـ Inventory Class (اختياري)</h3>
@@ -701,23 +702,36 @@ function renderAdmin() {
   $('selC8').innerHTML = '<option value="*">كل الأصناف (Class 8)</option>' + cat.classes.map(c => '<option value="' + esc(c.name) + '">' + esc(catLabel(c.name)) + ' (' + c.count + ')</option>').join('');
   $('selDay').innerHTML = '<option value="">تلقائي (النهارده)</option>' + DAYS.map(d => '<option value="' + d + '">' + DAY_AR[d] + '</option>').join('');
   fillRepDay();
+  if (typeof updRuleHint === 'function') updRuleHint();
 }
 
 function renderRules() {
   const rows = sched.map((r, i) => ({ r, i })).filter(x => x.r.day === selDay);
   $('rules').innerHTML = rows.length
-    ? rows.map(x => '<div class="rule"><span>' + esc(ruleLabel(x.r)) + '</span><button class="danger" data-i="' + x.i + '" style="flex:0 0 auto">حذف</button></div>').join('')
+    ? rows.map(x => '<div class="rule"><span>' + esc(ruleLabel(x.r)) + ' (' + cat.items.filter(it => inRules([x.r], it)).length + ' صنف)</span><button class="danger" data-i="' + x.i + '" style="flex:0 0 auto">حذف</button></div>').join('')
     : '<p class="note">مفيش حاجة متحددة ليوم ' + DAY_AR[selDay] + '.</p>';
 }
 
 $('dayChips').addEventListener('click', e => { const d = e.target.dataset.d; if (d) { selDay = d; renderAdmin(); } });
 $('rules').addEventListener('click', e => { const i = e.target.dataset.i; if (i !== undefined) { sched.splice(Number(i), 1); renderRules(); } });
 
+const curRule = () => ({ day: selDay, ic: $('selIc').value, c8: $('selC8').value, kw: $('selKw').value.trim() || '*' });
+function updRuleHint() {
+  if (!isValidCat(cat)) return;
+  const n = cat.items.filter(it => inRules([curRule()], it)).length;
+  $('ruleHint').textContent = 'الاختيار الحالي هيشمل ' + n + ' صنف' + (n ? '' : ' (الاختيارين مع بعض مش بيطلعوا أي صنف، غيّر واحد منهم)');
+  $('ruleHint').style.color = n ? '' : '#f87171';
+}
+['selIc', 'selC8'].forEach(id => $(id).addEventListener('change', updRuleHint));
+$('selKw').addEventListener('input', updRuleHint);
 $('addRule').onclick = () => {
-  const r = { day: selDay, ic: $('selIc').value, c8: $('selC8').value, kw: $('selKw').value.trim() || '*' };
+  const r = curRule();
+  const n = cat.items.filter(it => inRules([r], it)).length;
+  if (!n) { $('admMsg').textContent = 'الاختيار ده مفيهوش أي صنف: التصنيف والـ Class 8 بيتطبقوا مع بعض. اختار واحد بس أو غيّر الكلمة.'; updRuleHint(); return; }
   if (!sched.some(x => x.day === r.day && x.ic === r.ic && x.c8 === r.c8 && (x.kw || '*') === r.kw)) sched.push(r);
-  $('selKw').value = '';
-  renderRules();
+  $('selIc').value = '*'; $('selC8').value = '*'; $('selKw').value = '';
+  $('admMsg').textContent = 'اتضاف (' + n + ' صنف). متنساش تضغط حفظ الجدول.';
+  renderRules(); updRuleHint();
 };
 
 $('saveSched').onclick = async () => {
