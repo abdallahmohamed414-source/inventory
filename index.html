@@ -145,6 +145,10 @@ button:disabled{opacity:.5}
   <h1>الأدمن</h1>
   <div id="pinBox">
     <input id="pin" type="password" inputmode="numeric" placeholder="PIN">
+    <h3>6) تقرير الأدمن</h3>
+<div class="row"><select id="repDay" aria-label="اليوم"></select><button id="repBtn" style="flex:0 0 auto">عرض</button></div>
+<pre id="repOut" class="note" style="white-space:pre-wrap;direction:rtl;font-family:inherit"></pre>
+<div class="row"><button class="pri hide" id="repCopy">نسخ للواتساب</button><button class="hide" id="repWa">فتح واتساب</button></div>
     <div class="row"><button class="pri" id="pinOk">فتح</button><button id="admClose0">رجوع</button></div>
   </div>
   <div id="admBox" class="hide">
@@ -687,7 +691,7 @@ async function adm(body, ok) {
 function renderAdmin() {
   if (!isValidCat(cat)) {
     $('admMsg').textContent = 'تعذر تحميل بيانات الكتالوج. اتأكد من النت ورابط السيرفر.';
-    return;
+    return;fillRepDay();
   }
   $('stockAt').textContent = 'آخر استيراد استوك: ' + (cat.stockAt || 'لسه محصلش');
   $('mapAt').textContent = (cat.hasMap ? 'ملف الـ Class اترفع: ' + cat.mapAt + '. ' : 'الـ Inventory Class مربوط تلقائي من شيت الاستوك. ارفع ملف Stock Items لو عايز التخصيص اليدوي. ') + (cat.unmatched ? 'أصناف من غير Class: ' + cat.unmatched : '');
@@ -707,7 +711,7 @@ function renderRules() {
     : '<p class="note">مفيش حاجة متحددة ليوم ' + DAY_AR[selDay] + '.</p>';
 }
 
-$('dayChips').addEventListener('click', e => { const d = e.target.dataset.d; if (d) { selDay = d; renderAdmin(); } });
+$('dayChips').addEventListener('click', e => { const d = e.target.dataset.d; if (d) { selDay = d; renderAdmin();fillRepDay(); } });
 $('rules').addEventListener('click', e => { const i = e.target.dataset.i; if (i !== undefined) { sched.splice(Number(i), 1); renderRules(); } });
 
 $('addRule').onclick = () => {
@@ -732,7 +736,7 @@ $('pinOk').onclick = async () => {
     if (!isValidCat(cat)) throw new Error('فشل تحميل البيانات من الشيت');
     $('pinBox').classList.add('hide'); $('admBox').classList.remove('hide'); $('admMsg').textContent = '';
     sched = (cat.schedule || []).slice(); renderAdmin();
-  } catch (e) { $('admMsg').textContent = 'PIN غلط أو مفيش اتصال: ' + e.message; }
+  } catch (e) { $('admMsg').textContent = 'PIN غلط أو مفيش اتصال: ' + e.message;fillRepDay(); }
 };
 
 function sendFile(inputId, action, okMsg) {
@@ -744,7 +748,7 @@ function sendFile(inputId, action, okMsg) {
     const r = await adm({ action, name: f.name, b64: String(fr.result).split(',')[1] }, x => okMsg(x.summary));
     if (r) {
       await loadCatalog();
-      if (isValidCat(cat)) { sched = (cat.schedule || []).slice(); renderAdmin(); }
+      if (isValidCat(cat)) { sched = (cat.schedule || []).slice(); renderAdmin();fillRepDay();}
     }
   };
   fr.readAsDataURL(f);
@@ -768,7 +772,45 @@ $('clrBtn').onclick = async () => {
   const r = await adm({ action: 'clearScans' }, () => 'اتمسحت ✓');
   if (r) { seenSerials = {}; LS.set('seenSerials', {}); recent = []; renderList(); }
 };
-
+/* ====== admin report ====== */
+let repTxt = '';
+function fillRepDay() {
+  if ($('repDay').options.length) return;
+  $('repDay').innerHTML = '<option value="">اليوم الحالي</option>' +
+    DAYS.map(d => '<option value="' + d + '">' + DAY_AR[d] + '</option>').join('') + '<option value="*">كل الأسبوع</option>';
+}
+function repText(r) {
+  const CAP = 25, t = r.totals, L = [];
+  const line = x => '• ' + x[2].slice(0, 40) + (x[1] ? ' (' + x[1] + ')' : ' [' + x[0] + ']') + (x[1] ? '' : ' النظام ' + x[3] + ' / الفعلي ' + x[4]);
+  const part = (title, arr) => {
+    if (!arr.length) return;
+    L.push(title + ' (' + arr.length + '):');
+    arr.slice(0, CAP).forEach(x => L.push(line(x)));
+    if (arr.length > CAP) L.push('… و ' + (arr.length - CAP) + ' أخرى');
+  };
+  L.push('📊 تقرير جرد ' + (r.day === '*' ? 'الأسبوع' : (DAY_AR[r.day] || r.day)) + ' - ' + r.at);
+  L.push('✅ تمام ' + t.match + ' | ❌ غير مجرد ' + t.unc + ' | ⚠️ ناقص ' + t.short + ' | ➕ زيادة ' + t.over);
+  r.groups.forEach(g => {
+    if (!g.unc.length && !g.short.length && !g.over.length) return;
+    L.push('', '▪️ ' + g.name + ' (اتجرد ' + g.counted + ' من ' + g.total + ')');
+    part('❌ غير مجرد', g.unc); part('⚠️ ناقص', g.short); part('➕ زيادة', g.over);
+  });
+  if (r.nis.length) { L.push('', '🚫 سكانات مش في السيستم (' + r.nis.length + '):'); r.nis.slice(0, CAP).forEach(x => L.push('• ' + x[0] + ' × ' + x[1])); }
+  return L.join('\n');
+}
+$('repBtn').onclick = async () => {
+  const r = await adm({ action: 'report', day: $('repDay').value }, () => '');
+  if (!r) return;
+  repTxt = repText(r.report);
+  $('repOut').textContent = repTxt;
+  $('repCopy').classList.remove('hide'); $('repWa').classList.remove('hide');
+  $('admMsg').textContent = 'التقرير جاهز ✓';
+};
+$('repCopy').onclick = async () => {
+  try { await navigator.clipboard.writeText(repTxt); $('admMsg').textContent = 'اتنسخ ✓'; }
+  catch (e) { const s = window.getSelection(), g = document.createRange(); g.selectNodeContents($('repOut')); s.removeAllRanges(); s.addRange(g); $('admMsg').textContent = 'حدد النص واضغط نسخ يدويًا'; }
+};
+$('repWa').onclick = () => window.open('https://wa.me/?text=' + encodeURIComponent(repTxt), '_blank');
 /* ====== boot ====== */
 document.querySelectorAll('.logoImg').forEach(i => {
   i.onerror = () => { const d = document.createElement('div'); d.className = 'logoTxt'; d.textContent = 'DREAM 2000'; i.replaceWith(d); };
