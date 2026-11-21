@@ -807,6 +807,44 @@ function loadTess() {
 }
 function setScanTab(num) { $('scanBarBtn').classList.toggle('on', !num); $('scanNumBtn').classList.toggle('on', num); }
 $('scanBarBtn').onclick = () => { setScanTab(false); $('srchList').innerHTML = ''; if (!camOn) startCam(); };
+let ocrWorker = null;
+async function getOcr() {
+  await loadTess();
+  if (!ocrWorker) {
+    ocrWorker = await Tesseract.createWorker('eng');
+    await ocrWorker.setParameters({ tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-', tessedit_pageseg_mode: '6', user_defined_dpi: '300' });
+  }
+  return ocrWorker;
+}
+/* تحسين الصورة: تدرج رمادي + مط التباين + Otsu (أبيض/أسود) */
+function enhance(src, invert) {
+  const w = src.width, h = src.height, g = src.getContext('2d');
+  const img = g.getImageData(0, 0, w, h), d = img.data, n = w * h, gray = new Uint8ClampedArray(n), hist = new Uint32Array(256);
+  for (let i = 0; i < n; i++) { const v = (d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114) | 0; gray[i] = v; hist[v]++; }
+  let lo = 0, hi = 255, acc = 0;
+  for (let i = 0; i < 256; i++) { acc += hist[i]; if (acc >= n * 0.02) { lo = i; break; } }
+  acc = 0;
+  for (let i = 255; i >= 0; i--) { acc += hist[i]; if (acc >= n * 0.02) { hi = i; break; } }
+  const rng = Math.max(1, hi - lo), h2 = new Uint32Array(256);
+  for (let i = 0; i < n; i++) { const v = Math.max(0, Math.min(255, ((gray[i] - lo) * 255 / rng) | 0)); gray[i] = v; h2[v]++; }
+  let sum = 0; for (let i = 0; i < 256; i++) sum += i * h2[i];
+  let sB = 0, wB = 0, best = 0, thr = 128;
+  for (let t = 0; t < 256; t++) {
+    wB += h2[t]; if (!wB) continue; const wF = n - wB; if (!wF) break;
+    sB += t * h2[t]; const mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) * (mB - mF);
+    if (v > best) { best = v; thr = t; }
+  }
+  for (let i = 0; i < n; i++) { let v = gray[i] > thr ? 255 : 0; if (invert) v = 255 - v; d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; d[i * 4 + 3] = 255; }
+  const out = document.createElement('canvas'); out.width = w; out.height = h;
+  out.getContext('2d').putImageData(img, 0, 0);
+  return out;
+}
+function fixDigits(t) {
+  const dg = (t.match(/[0-9]/g) || []).length;
+  if (dg / t.length < 0.6) return t;
+  return t.replace(/[OQD]/g, '0').replace(/[IL]/g, '1').replace(/Z/g, '2').replace(/S/g, '5').replace(/G/g, '6').replace(/B/g, '8');
+}
+const isKnown = t => !!(cat.byId[t] || cat.bySerial[t] || (cat.links && cat.links[t]));
 $('scanNumBtn').onclick = async () => {
   setScanTab(true);
   const v = $('vid');
@@ -817,18 +855,23 @@ $('scanNumBtn').onclick = async () => {
     let sw = vw, sh = vh, ox = 0, oy = 0;
     if (vw / vh > ar) { sw = vh * ar; ox = (vw - sw) / 2; } else { sh = vw / ar; oy = (vh - sh) / 2; }
     const cx = ox + sw * 0.08, cy = oy + sh * 0.25, cw = sw * 0.84, ch = sh * 0.5;
+    const sc = Math.min(3, Math.max(1, 1600 / cw));
     const cv = document.createElement('canvas');
-    cv.width = Math.round(cw * 1.5); cv.height = Math.round(ch * 1.5);
-    const g = cv.getContext('2d');
-    g.filter = 'grayscale(1) contrast(1.5)';
-    g.drawImage(v, cx, cy, cw, ch, 0, 0, cv.width, cv.height);
-    await loadTess();
-    const r = await Tesseract.recognize(cv, 'eng');
-    const toks = (r.data.text || '').toUpperCase().replace(/[^A-Z0-9\s-]/g, ' ').split(/\s+/)
-      .map(t => t.replace(/^-+|-+$/g, '')).filter(t => t.length >= 6);
-    const uniq = toks.filter((t, i) => toks.indexOf(t) === i).slice(0, 8);
-    $('srchList').innerHTML = uniq.length
-      ? '<p class="note">اختار الرقم الصح:</p>' + uniq.map(t => '<div class="row"><button data-ocr="' + esc(t) + '">' + esc(t) + '</button></div>').join('')
+    cv.width = Math.round(cw * sc); cv.height = Math.round(ch * sc);
+    cv.getContext('2d').drawImage(v, cx, cy, cw, ch, 0, 0, cv.width, cv.height);
+    const worker = await getOcr();
+    const found = [];
+    for (const inv of [false, true]) {
+      const r = await worker.recognize(enhance(cv, inv));
+      (r.data.text || '').toUpperCase().replace(/[^A-Z0-9\s-]/g, ' ').split(/\s+/).forEach(t => {
+        t = t.replace(/^-+|-+$/g, ''); if (t.length < 6) return;
+        [t, fixDigits(t)].forEach(x => { if (found.indexOf(x) < 0) found.push(x); });
+      });
+    }
+    const known = found.filter(isKnown), other = found.filter(x => !isKnown(x)).slice(0, 6);
+    const btn = (t, k) => '<div class="row"><button' + (k ? ' class="pri"' : '') + ' data-ocr="' + esc(t) + '">' + (k ? '✓ ' : '') + esc(t) + '</button></div>';
+    $('srchList').innerHTML = (known.length || other.length)
+      ? '<p class="note">' + (known.length ? 'الأرقام اللي عليها ✓ موجودة في السيستم:' : 'مفيش رقم مطابق للسيستم، اختار الأقرب أو صوّر تاني:') + '</p>' + known.map(t => btn(t, 1)).join('') + other.map(t => btn(t, 0)).join('')
       : '<p class="note">معرفتش أقرأ رقم، حط الرقم جوه الإطار بإضاءة كويسة وحاول تاني.</p>';
   } catch (err) { $('srchList').innerHTML = '<p class="note">فشل: ' + esc(err.message) + '</p>'; }
 };
