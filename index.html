@@ -124,6 +124,18 @@ button:disabled{opacity:.5}
     <input id="manual" type="text" autocomplete="off" placeholder="اكتب الكود/السيريال واضغط Enter">
     <button id="addBtn" style="flex:0 0 auto">+</button>
   </div>
+    <div class="row">
+    <input id="manual" type="text" autocomplete="off" placeholder="اكتب الكود/السيريال واضغط Enter">
+    <button id="addBtn" style="flex:0 0 auto">+</button>
+  </div>
+
+  <!-- ===== الجديد: ابدأ من هنا ===== -->
+  <div class="row"><input id="srch" type="text" autocomplete="off" placeholder="ابحث بالاسم لو الباركود تالف"><button id="ocrBtn" style="flex:0 0 auto">📷 صوّر الرقم</button></div>
+  <input id="ocrFile" type="file" accept="image/*" capture="environment" class="hide">
+  <div id="srchList"></div>
+  <!-- ===== الجديد: انتهى ===== -->
+
+  <div class="row"><button id="againBtn">+ كرر آخر سكان</button><button id="undoBtn" class="danger">↩ تراجع</button></div>
   <div class="row"><button id="againBtn">+ كرر آخر سكان</button><button id="undoBtn" class="danger">↩ تراجع</button></div>
   <div class="row"><button id="adminBtn">أدمن</button></div>
 
@@ -771,6 +783,72 @@ $('clrBtn').onclick = async () => {
   if (!confirm('هتمسح كل السكانات من الشيت. متأكد؟')) return;
   const r = await adm({ action: 'clearScans' }, () => 'اتمسحت ✓');
   if (r) { seenSerials = {}; LS.set('seenSerials', {}); recent = []; renderList(); }
+};
+  /* ====== name search + OCR ====== */
+let srchT = null, ocrLoading = null;
+function searchItems(q) {
+  const toks = q.toUpperCase().split(/\s+/).filter(Boolean), out = [];
+  if (!toks.length || !isValidCat(cat)) return out;
+  for (const it of cat.items) {
+    const hay = (it.d + ' ' + it.i + ' ' + it.s.join(' ')).toUpperCase();
+    if (toks.every(t => hay.indexOf(t) >= 0)) { out.push(it); if (out.length >= 60) break; }
+  }
+  return out.sort((a, b) => (b.y ? 1 : 0) - (a.y ? 1 : 0)).slice(0, 15);
+}
+function renderSearch() {
+  const q = $('srch').value.trim();
+  if (q.length < 2) { $('srchList').innerHTML = ''; return; }
+  const list = searchItems(q);
+  $('srchList').innerHTML = list.length ? list.map(it => {
+    let act;
+    if (it.s.length) {
+      const left = it.s.filter(s => !isDone(it.i.toUpperCase() + '|' + s.toUpperCase()));
+      act = left.length
+        ? left.slice(0, 12).map(s => '<button class="remBtn" data-sv="' + esc(s) + '">' + esc(s) + '</button>').join(' ') + (left.length > 12 ? ' <span class="m">+' + (left.length - 12) + '</span>' : '')
+        : '<span class="m">كل السيريالات اتعدّت ✅</span>';
+    } else act = '<button class="remBtn pri" data-id="' + esc(it.i) + '">+ عدّ (× ' + qty + ')</button>';
+    return '<div class="it ' + (it.y ? '' : 'warn') + '"><div class="v">' + esc(it.d) + '</div><div class="m">' + esc(it.i) + (it.y ? '' : ' · خارج الجرد') + '</div><div style="margin-top:6px">' + act + '</div></div>';
+  }).join('') : '<p class="note">مفيش نتايج.</p>';
+}
+$('srch').addEventListener('input', () => { clearTimeout(srchT); srchT = setTimeout(renderSearch, 250); });
+$('srchList').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const v = b.dataset.sv || b.dataset.id; if (!v) return;
+  handleScan(v); renderSearch();
+});
+
+function loadOcr() {
+  if (window.Tesseract) return Promise.resolve();
+  return ocrLoading = ocrLoading || new Promise((ok, no) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+    s.onload = ok; s.onerror = () => { ocrLoading = null; no(new Error('محتاج نت')); };
+    document.head.appendChild(s);
+  });
+}
+async function runOcr(file) {
+  $('res').innerHTML = '<span class="note">جاري قراءة الرقم... (أول مرة بتاخد وقت أطول)</span>';
+  try {
+    await loadOcr();
+    const w = await Tesseract.createWorker('eng');
+    await w.setParameters({ tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-/' });
+    const { data } = await w.recognize(file);
+    await w.terminate();
+    const toks = (data.text.toUpperCase().match(/[A-Z0-9][A-Z0-9\-\/]{3,}/g) || []).sort((a, b) => b.length - a.length);
+    for (const t of toks) for (const v of [t, t.replace(/O/g, '0')]) {
+      if (cat.byId[v] || cat.bySerial[v]) { handleScan(v); return; }
+    }
+    $('srch').value = toks[0] || ''; renderSearch();
+    $('res').innerHTML = toks.length
+      ? 'قرأت: <b>' + esc(toks.slice(0, 3).join(' · ')) + '</b><small>مفيش تطابق مباشر، شوف نتايج البحث تحت أو صحّح الرقم</small>'
+      : '<span class="note">مقدرتش أقرأ رقم: قرّب وصوّر الرقم بس.</span>';
+  } catch (e) { $('res').innerHTML = '<span class="note">فشل قراءة الرقم: ' + esc(e.message) + '</span>'; }
+}
+$('ocrBtn').onclick = () => { $('ocrFile').value = ''; $('ocrFile').click(); };
+$('ocrFile').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  await runOcr(f);
+  stopCam(); startCam();
 };
 /* ====== admin report ====== */
 let repTxt = '';
