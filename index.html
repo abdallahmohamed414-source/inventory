@@ -218,7 +218,7 @@ async function apiGet(q) {
 }
 
 /* ====== state ====== */
-let emp = LS.get('emp', '');
+let emp = ''; LS.set('emp', '');
 let mode = 'code';
 let qty = 1, keepQty = false;
 let cat = LS.get('cat', null);
@@ -422,7 +422,7 @@ function handleScan(value, qOverride) {
   const r = resolve(mode, value);
   const id = Date.now() + '-' + Math.random().toString(36).slice(2, 7);
   const finalQty = r.status === 'Duplicate serial' || r.status === 'Needs serial' ? 0 : (r.serial ? 1 : q);
-  const entry = { id, ts: Date.now(), type: mode, value, qty: q };
+  const entry = { id, ts: Date.now(), type: mode, value, qty: q, emp };
   queue.push(entry); LS.set('queue', queue);
   if (r.serial && r.status !== 'Duplicate serial') { seenSerials[r.serial.toUpperCase()] = 1; LS.set('seenSerials', seenSerials); }
   const kind = STATUS[r.status][1];
@@ -519,12 +519,15 @@ function undoLast() {
   renderList(); flush();
 }
 async function flush() {
-  if (sending || !emp || (!queue.length && !undoQ.length)) return;
+  if (sending) return;
+  const first = queue[0], fe = first ? (first.emp || emp) : emp;
+  const batch = first && fe ? queue.filter(q => (q.emp || emp) === fe).slice(0, 40) : [];
+  const canUndo = undoQ.length && emp;
+  if (!batch.length && !canUndo) return;
   sending = true;
-  const batch = queue.slice(0, 40);
   try {
     if (batch.length) {
-      const r = await apiPost({ action: 'scan', emp, scans: batch });
+      const r = await apiPost({ action: 'scan', emp: fe, scans: batch });
       if (!r.ok) throw new Error(r.error || 'error');
       const done = {};
       r.results.forEach(x => { done[x.id] = x; });
@@ -538,7 +541,7 @@ async function flush() {
         }
       });
     }
-    if (undoQ.length) {
+    if (canUndo) {
       const ids = undoQ.slice();
       const u = await apiPost({ action: 'undo', emp, ids });
       if (!u.ok) throw new Error(u.error || 'error');
@@ -669,10 +672,10 @@ setInterval(() => { if (emp && navigator.onLine) loadCatalog(); }, 15 * 60 * 100
 $('goBtn').onclick = () => {
   const v = $('empIn').value.trim();
   if (!v) { $('loginMsg').textContent = 'اكتب رقم الموظف'; return; }
-  emp = v; LS.set('emp', emp); enter();
+  emp = v; enter();
 };
 $('empIn').addEventListener('keydown', e => { if (e.key === 'Enter') $('goBtn').click(); });
-$('outBtn').onclick = e => { e.preventDefault(); stopCam(); emp = ''; LS.set('emp', ''); $('main').classList.add('hide'); $('pick').classList.add('hide'); $('login').classList.remove('hide'); };
+$('outBtn').onclick = e => { e.preventDefault(); stopCam(); emp = ''; $('empIn').value = ''; $('main').classList.add('hide'); $('pick').classList.add('hide'); $('login').classList.remove('hide'); };
 
 /* ====== admin ====== */
 let adminPin = '', sched = [], selDay = 'Sat';
@@ -943,7 +946,7 @@ if (cat && !isValidCat(cat)) {
   LS.set('cat', null);
 }
 if (cat) indexCat(cat);
-if (emp) enter();
+flush();
 </script>
 </body>
 </html>
