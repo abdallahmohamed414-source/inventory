@@ -59,6 +59,15 @@ button:disabled{opacity:.5}
 .progBox{margin:6px 0}
 .pc{display:inline-block;margin:3px 0 3px 6px;padding:6px 10px;border-radius:999px;background:#374151;font-size:13px}
 .pc.ok{background:#14532d}
+.kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+.kpi div{background:var(--card);border-radius:12px;padding:10px;text-align:center}
+.kpi b{display:block;font-size:22px}
+.kpi span{font-size:12px;color:var(--mut)}
+.kpi .g b{color:#4ade80}.kpi .w b{color:#fbbf24}.kpi .r b{color:#f87171}
+details.grp{background:var(--card);border-radius:12px;margin:8px 0;padding:10px}
+details.grp summary{cursor:pointer;font-size:15px;line-height:1.7}
+details.grp .pbar{margin:6px 0}
+.sub{margin:8px 0 4px;font-weight:bold;font-size:13px}
 </style>
 </head>
 <body>
@@ -109,8 +118,8 @@ button:disabled{opacity:.5}
   <div id="res"><span class="note">وجّه الكاميرا على الباركود</span></div>
 
   <div class="row seg">
-    <button id="scanBarBtn" class="on">اسكان الباركود</button>
-    <button id="scanNumBtn">اسكان الرقم (لو الباركود تالف)</button>
+    <button id="mCode">كود</button>
+    <button id="mSerial">سيريال</button>
   </div>
 
   <div class="note">الكمية للسكان الجاي (ترجع 1 بعد كل سكان)</div>
@@ -124,10 +133,6 @@ button:disabled{opacity:.5}
     <input id="manual" type="text" autocomplete="off" placeholder="اكتب الكود/السيريال واضغط Enter">
     <button id="addBtn" style="flex:0 0 auto">+</button>
   </div>
-  <div class="row">
-    <input id="srch" type="text" autocomplete="off" placeholder="بحث بالاسم">
-  </div>
-  <div id="srchList"></div>
   <div class="row"><button id="againBtn">+ كرر آخر سكان</button><button id="undoBtn" class="danger">↩ تراجع</button></div>
   <div class="row"><button id="adminBtn">أدمن</button></div>
 
@@ -143,6 +148,16 @@ button:disabled{opacity:.5}
   <div id="remList"></div>
 </section>
 
+<!-- Admin report -->
+<section id="rep" class="modal hide" style="z-index:12">
+  <h1 id="repTitle"></h1>
+  <p class="note" id="repNote"></p>
+  <div id="repBody"></div>
+  <div class="row"><button class="pri" id="repCopy">نسخ ملخص (واتساب)</button><button id="repCopyFull">نسخ تفصيلي</button></div>
+  <div class="row"><button id="repWa">فتح في واتساب</button><button id="repClose">رجوع</button></div>
+  <p id="repMsg" class="note"></p>
+</section>
+
 <!-- Admin -->
 <section id="admin" class="modal hide">
   <div class="brand sm"><img class="logoImg" alt="Dream 2000"></div>
@@ -152,6 +167,10 @@ button:disabled{opacity:.5}
     <div class="row"><button class="pri" id="pinOk">فتح</button><button id="admClose0">رجوع</button></div>
   </div>
   <div id="admBox" class="hide">
+    <h3>📊 تقرير الجرد</h3>
+    <p class="note">عجز / زيادة / لم يُجرد حسب التصنيف، مع نسخ جاهز للواتساب.</p>
+    <div class="row"><select id="selRepDay" aria-label="يوم التقرير"></select><button class="pri" id="repBtn" style="flex:0 0 auto">عرض التقرير</button></div>
+
     <h3>1) رفع شيت السيستم اليومي (xlsx)</h3>
     <p class="note" id="stockAt"></p>
     <p class="note">كل يوم ارفع الملف الجديد: بيستبدل القديم، فالمباع من الفرع بيختفي.</p>
@@ -165,30 +184,21 @@ button:disabled{opacity:.5}
     <div class="row"><select id="selIc" aria-label="Inventory Class"></select></div>
     <div class="row"><select id="selC8" aria-label="Class 8"></select></div>
     <div class="row"><input id="selKw" type="text" placeholder="كلمة في اسم الصنف (اختياري) مثلًا DEVIA"></div>
-    <p class="note" id="ruleHint"></p>
     <div class="row"><button id="addRule">+ إضافة لليوم المحدد</button><button class="pri" id="saveSched">حفظ الجدول</button></div>
 
-    <div class="hide">
-    <h3>ربط الـ Inventory Class (اختياري)</h3>
+    <h3>3) ربط الـ Inventory Class (اختياري)</h3>
     <p class="note" id="mapAt"></p>
     <input id="mapFile" type="file" accept=".xlsx,.xls">
     <div class="row"><button id="mapBtn">رفع ملف الـ Class</button></div>
 
-    </div>
-
-    <h3>3) اليوم المستخدم في الجرد</h3>
+    <h3>4) اليوم المستخدم في الجرد</h3>
     <div class="row"><select id="selDay" aria-label="اليوم"></select><button id="dayBtn" style="flex:0 0 auto">حفظ</button></div>
 
-    <h3>4) أدوات</h3>
+    <h3>5) أدوات</h3>
     <div class="row"><button id="refBtn">تحديث المقارنة</button></div>
     <div class="row"><button class="pri" id="dcBtn">إنهاء جرد اليوم وحفظ التقرير</button></div>
     <div class="row"><button class="pri" id="wkBtn">إغلاق الأسبوع وحفظ في History</button></div>
     <div class="row"><button class="danger" id="clrBtn">مسح كل السكانات</button></div>
-    <h3>5) تقرير الأدمن</h3>
-    <p class="note">غير مجرد، ناقص، وزيادة حسب الكاتجري لليوم المحدد.</p>
-    <div class="row"><select id="repDay" aria-label="يوم التقرير"></select><button class="pri" id="repBtn" style="flex:0 0 auto">عرض</button></div>
-    <div class="row"><button id="repCopy">نسخ</button><button id="repWa">فتح واتساب</button></div>
-    <pre id="repOut" class="note" style="white-space:pre-wrap;word-break:break-word;user-select:text"></pre>
     <div class="row"><button id="admClose">رجوع</button></div>
   </div>
   <p id="admMsg" class="note"></p>
@@ -218,8 +228,8 @@ async function apiGet(q) {
 }
 
 /* ====== state ====== */
-let emp = ''; LS.set('emp', '');
-let mode = 'code';
+let emp = LS.get('emp', '');
+let mode = LS.get('mode', 'code');
 let qty = 1, keepQty = false;
 let cat = LS.get('cat', null);
 let myRules = LS.get('myRules', []);
@@ -422,7 +432,7 @@ function handleScan(value, qOverride) {
   const r = resolve(mode, value);
   const id = Date.now() + '-' + Math.random().toString(36).slice(2, 7);
   const finalQty = r.status === 'Duplicate serial' || r.status === 'Needs serial' ? 0 : (r.serial ? 1 : q);
-  const entry = { id, ts: Date.now(), type: mode, value, qty: q, emp };
+  const entry = { id, ts: Date.now(), type: mode, value, qty: q };
   queue.push(entry); LS.set('queue', queue);
   if (r.serial && r.status !== 'Duplicate serial') { seenSerials[r.serial.toUpperCase()] = 1; LS.set('seenSerials', seenSerials); }
   const kind = STATUS[r.status][1];
@@ -519,15 +529,12 @@ function undoLast() {
   renderList(); flush();
 }
 async function flush() {
-  if (sending) return;
-  const first = queue[0], fe = first ? (first.emp || emp) : emp;
-  const batch = first && fe ? queue.filter(q => (q.emp || emp) === fe).slice(0, 40) : [];
-  const canUndo = undoQ.length && emp;
-  if (!batch.length && !canUndo) return;
+  if (sending || !emp || (!queue.length && !undoQ.length)) return;
   sending = true;
+  const batch = queue.slice(0, 40);
   try {
     if (batch.length) {
-      const r = await apiPost({ action: 'scan', emp: fe, scans: batch });
+      const r = await apiPost({ action: 'scan', emp, scans: batch });
       if (!r.ok) throw new Error(r.error || 'error');
       const done = {};
       r.results.forEach(x => { done[x.id] = x; });
@@ -541,7 +548,7 @@ async function flush() {
         }
       });
     }
-    if (canUndo) {
+    if (undoQ.length) {
       const ids = undoQ.slice();
       const u = await apiPost({ action: 'undo', emp, ids });
       if (!u.ok) throw new Error(u.error || 'error');
@@ -599,6 +606,11 @@ async function toggleTorch() {
 }
 
 /* ====== UI wiring ====== */
+function renderMode() {
+  $('mCode').classList.toggle('on', mode === 'code');
+  $('mSerial').classList.toggle('on', mode === 'serial');
+  LS.set('mode', mode);
+}
 function renderQty() {
   const opts = [1, 2, 3, 5, 10];
   $('qtyChips').innerHTML = opts.map(n => '<span class="chip' + (qty === n ? ' on' : '') + '" data-q="' + n + '">' + n + '</span>').join('');
@@ -608,6 +620,8 @@ function renderQty() {
 $('qtyChips').addEventListener('click', e => { const q = e.target.dataset.q; if (q) { qty = Number(q); renderQty(); } });
 $('qtyCustom').addEventListener('input', e => { const n = Math.floor(Number(e.target.value)); if (n >= 1) { qty = n; renderQty(); } });
 $('keepBtn').onclick = () => { keepQty = !keepQty; renderQty(); };
+$('mCode').onclick = () => { mode = 'code'; renderMode(); };
+$('mSerial').onclick = () => { mode = 'serial'; renderMode(); };
 $('camBtn').onclick = () => camOn ? stopCam() : startCam();
 $('torchBtn').onclick = toggleTorch;
 $('addBtn').onclick = () => { const v = $('manual').value; $('manual').value = ''; handleScan(v); };
@@ -664,7 +678,7 @@ $('pickGo').onclick = () => {
   if (!myRules.length) myRules = cat.rules.map(ruleKey);
   LS.set('myRules', myRules);
   $('pick').classList.add('hide'); $('main').classList.remove('hide');
-  renderQty(); renderList(); renderScope(); renderProgAll(); startCam();
+  renderMode(); renderQty(); renderList(); renderScope(); renderProgAll(); startCam();
 };
 $('pickOut').onclick = () => { $('pick').classList.add('hide'); $('login').classList.remove('hide'); };
 $('chgCat').onclick = e => { e.preventDefault(); showPick(); };
@@ -672,10 +686,10 @@ setInterval(() => { if (emp && navigator.onLine) loadCatalog(); }, 15 * 60 * 100
 $('goBtn').onclick = () => {
   const v = $('empIn').value.trim();
   if (!v) { $('loginMsg').textContent = 'اكتب رقم الموظف'; return; }
-  emp = v; enter();
+  emp = v; LS.set('emp', emp); enter();
 };
 $('empIn').addEventListener('keydown', e => { if (e.key === 'Enter') $('goBtn').click(); });
-$('outBtn').onclick = e => { e.preventDefault(); stopCam(); emp = ''; $('empIn').value = ''; $('main').classList.add('hide'); $('pick').classList.add('hide'); $('login').classList.remove('hide'); };
+$('outBtn').onclick = e => { e.preventDefault(); stopCam(); emp = ''; LS.set('emp', ''); $('main').classList.add('hide'); $('pick').classList.add('hide'); $('login').classList.remove('hide'); };
 
 /* ====== admin ====== */
 let adminPin = '', sched = [], selDay = 'Sat';
@@ -706,38 +720,25 @@ function renderAdmin() {
   $('selIc').innerHTML = '<option value="*">كل الـ Inventory Classes</option>' + cat.ics.map(x => '<option value="' + esc(x.id) + '">' + esc(icName(x.id)) + ' (' + x.count + ')</option>').join('');
   $('selIc').disabled = !cat.ics.length;
   $('selC8').innerHTML = '<option value="*">كل الأصناف (Class 8)</option>' + cat.classes.map(c => '<option value="' + esc(c.name) + '">' + esc(catLabel(c.name)) + ' (' + c.count + ')</option>').join('');
+  $('selRepDay').innerHTML = '<option value="">اليوم الحالي</option>' + ADM_DAYS.map(d => '<option value="' + d + '">' + DAY_AR[d] + '</option>').join('');
   $('selDay').innerHTML = '<option value="">تلقائي (النهارده)</option>' + DAYS.map(d => '<option value="' + d + '">' + DAY_AR[d] + '</option>').join('');
-  fillRepDay();
-  if (typeof updRuleHint === 'function') updRuleHint();
 }
 
 function renderRules() {
   const rows = sched.map((r, i) => ({ r, i })).filter(x => x.r.day === selDay);
   $('rules').innerHTML = rows.length
-    ? rows.map(x => '<div class="rule"><span>' + esc(ruleLabel(x.r)) + ' (' + cat.items.filter(it => inRules([x.r], it)).length + ' صنف)</span><button class="danger" data-i="' + x.i + '" style="flex:0 0 auto">حذف</button></div>').join('')
+    ? rows.map(x => '<div class="rule"><span>' + esc(ruleLabel(x.r)) + '</span><button class="danger" data-i="' + x.i + '" style="flex:0 0 auto">حذف</button></div>').join('')
     : '<p class="note">مفيش حاجة متحددة ليوم ' + DAY_AR[selDay] + '.</p>';
 }
 
 $('dayChips').addEventListener('click', e => { const d = e.target.dataset.d; if (d) { selDay = d; renderAdmin(); } });
 $('rules').addEventListener('click', e => { const i = e.target.dataset.i; if (i !== undefined) { sched.splice(Number(i), 1); renderRules(); } });
 
-const curRule = () => ({ day: selDay, ic: $('selIc').value, c8: $('selC8').value, kw: $('selKw').value.trim() || '*' });
-function updRuleHint() {
-  if (!isValidCat(cat)) return;
-  const n = cat.items.filter(it => inRules([curRule()], it)).length;
-  $('ruleHint').textContent = 'الاختيار الحالي هيشمل ' + n + ' صنف' + (n ? '' : ' (الاختيارين مع بعض مش بيطلعوا أي صنف، غيّر واحد منهم)');
-  $('ruleHint').style.color = n ? '' : '#f87171';
-}
-['selIc', 'selC8'].forEach(id => $(id).addEventListener('change', updRuleHint));
-$('selKw').addEventListener('input', updRuleHint);
 $('addRule').onclick = () => {
-  const r = curRule();
-  const n = cat.items.filter(it => inRules([r], it)).length;
-  if (!n) { $('admMsg').textContent = 'الاختيار ده مفيهوش أي صنف: التصنيف والـ Class 8 بيتطبقوا مع بعض. اختار واحد بس أو غيّر الكلمة.'; updRuleHint(); return; }
+  const r = { day: selDay, ic: $('selIc').value, c8: $('selC8').value, kw: $('selKw').value.trim() || '*' };
   if (!sched.some(x => x.day === r.day && x.ic === r.ic && x.c8 === r.c8 && (x.kw || '*') === r.kw)) sched.push(r);
-  $('selIc').value = '*'; $('selC8').value = '*'; $('selKw').value = '';
-  $('admMsg').textContent = 'اتضاف (' + n + ' صنف). متنساش تضغط حفظ الجدول.';
-  renderRules(); updRuleHint();
+  $('selKw').value = '';
+  renderRules();
 };
 
 $('saveSched').onclick = async () => {
@@ -792,148 +793,82 @@ $('clrBtn').onclick = async () => {
   if (r) { seenSerials = {}; LS.set('seenSerials', {}); recent = []; renderList(); }
 };
 
-/* ====== name search + OCR ====== */
-function scanAs(type, value) { const m = mode; mode = type; handleScan(value); mode = m; }
-function renderSearch() {
-  const q = $('srch').value.trim().toUpperCase();
-  const box = $('srchList');
-  if (!q || !isValidCat(cat)) { box.innerHTML = ''; return; }
-  const words = q.split(/\s+/);
-  const hits = cat.items.filter(it => it.y && words.every(w => (it.d + ' ' + it.i).toUpperCase().indexOf(w) >= 0)).slice(0, 8);
-  box.innerHTML = hits.length ? hits.map(it => {
-    const left = it.s.filter(s => !isDone(it.i.toUpperCase() + '|' + s.toUpperCase()));
-    let h = '<div class="it"><div class="v">' + esc(it.d) + '</div><div class="m">' + esc(it.i) + (it.s.length ? ' · متبقي ' + left.length + ' سيريال' : '') + '</div>';
-    if (!it.s.length) h += '<div class="row"><button class="pri" data-sid="' + esc(it.i) + '">عدّ × ' + qty + '</button></div>';
-    else h += left.slice(0, 12).map(s => '<div class="row"><button data-sser="' + esc(s) + '">' + esc(s) + '</button></div>').join('');
-    return h + '</div>';
-  }).join('') : '<p class="note">مفيش نتايج.</p>';
-}
-$('srch').addEventListener('input', renderSearch);
-$('srchList').addEventListener('click', e => {
-  const a = e.target.closest('[data-sid]'), b = e.target.closest('[data-sser]'), c = e.target.closest('[data-ocr]');
-  if (a) { scanAs('code', a.dataset.sid); renderSearch(); }
-  else if (b) { scanAs('serial', b.dataset.sser); renderSearch(); }
-  else if (c) { scanAs('code', c.dataset.ocr); $('srchList').innerHTML = ''; setScanTab(false); }
-});
-let tessLoading = null;
-function loadTess() {
-  if (window.Tesseract) return Promise.resolve();
-  return tessLoading || (tessLoading = new Promise((ok, no) => {
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
-    s.onload = ok; s.onerror = () => { tessLoading = null; no(new Error('تعذر تحميل OCR')); };
-    document.head.appendChild(s);
-  }));
-}
-function setScanTab(num) { $('scanBarBtn').classList.toggle('on', !num); $('scanNumBtn').classList.toggle('on', num); }
-$('scanBarBtn').onclick = () => { setScanTab(false); $('srchList').innerHTML = ''; if (!camOn) startCam(); };
-let ocrWorker = null;
-async function getOcr() {
-  await loadTess();
-  if (!ocrWorker) {
-    ocrWorker = await Tesseract.createWorker('eng');
-    await ocrWorker.setParameters({ tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-', tessedit_pageseg_mode: '6', user_defined_dpi: '300' });
-  }
-  return ocrWorker;
-}
-/* تحسين الصورة: تدرج رمادي + مط التباين + Otsu (أبيض/أسود) */
-function enhance(src, invert) {
-  const w = src.width, h = src.height, g = src.getContext('2d');
-  const img = g.getImageData(0, 0, w, h), d = img.data, n = w * h, gray = new Uint8ClampedArray(n), hist = new Uint32Array(256);
-  for (let i = 0; i < n; i++) { const v = (d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114) | 0; gray[i] = v; hist[v]++; }
-  let lo = 0, hi = 255, acc = 0;
-  for (let i = 0; i < 256; i++) { acc += hist[i]; if (acc >= n * 0.02) { lo = i; break; } }
-  acc = 0;
-  for (let i = 255; i >= 0; i--) { acc += hist[i]; if (acc >= n * 0.02) { hi = i; break; } }
-  const rng = Math.max(1, hi - lo), h2 = new Uint32Array(256);
-  for (let i = 0; i < n; i++) { const v = Math.max(0, Math.min(255, ((gray[i] - lo) * 255 / rng) | 0)); gray[i] = v; h2[v]++; }
-  let sum = 0; for (let i = 0; i < 256; i++) sum += i * h2[i];
-  let sB = 0, wB = 0, best = 0, thr = 128;
-  for (let t = 0; t < 256; t++) {
-    wB += h2[t]; if (!wB) continue; const wF = n - wB; if (!wF) break;
-    sB += t * h2[t]; const mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) * (mB - mF);
-    if (v > best) { best = v; thr = t; }
-  }
-  for (let i = 0; i < n; i++) { let v = gray[i] > thr ? 255 : 0; if (invert) v = 255 - v; d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; d[i * 4 + 3] = 255; }
-  const out = document.createElement('canvas'); out.width = w; out.height = h;
-  out.getContext('2d').putImageData(img, 0, 0);
-  return out;
-}
-function fixDigits(t) {
-  const dg = (t.match(/[0-9]/g) || []).length;
-  if (dg / t.length < 0.6) return t;
-  return t.replace(/[OQD]/g, '0').replace(/[IL]/g, '1').replace(/Z/g, '2').replace(/S/g, '5').replace(/G/g, '6').replace(/B/g, '8');
-}
-const isKnown = t => !!(cat.byId[t] || cat.bySerial[t] || (cat.links && cat.links[t]));
-$('scanNumBtn').onclick = async () => {
-  setScanTab(true);
-  const v = $('vid');
-  if (!camOn || !v.videoWidth) { await startCam(); $('srchList').innerHTML = '<p class="note">الكاميرا اتشغلت: قرّب الرقم جوه الإطار واضغط اسكان الرقم تاني.</p>'; return; }
-  $('srchList').innerHTML = '<p class="note">جاري قراءة الرقم... ثبّت الموبايل</p>';
-  try {
-    const vw = v.videoWidth, vh = v.videoHeight, ar = 4 / 3;
-    let sw = vw, sh = vh, ox = 0, oy = 0;
-    if (vw / vh > ar) { sw = vh * ar; ox = (vw - sw) / 2; } else { sh = vw / ar; oy = (vh - sh) / 2; }
-    const cx = ox + sw * 0.08, cy = oy + sh * 0.25, cw = sw * 0.84, ch = sh * 0.5;
-    const sc = Math.min(3, Math.max(1, 1600 / cw));
-    const cv = document.createElement('canvas');
-    cv.width = Math.round(cw * sc); cv.height = Math.round(ch * sc);
-    cv.getContext('2d').drawImage(v, cx, cy, cw, ch, 0, 0, cv.width, cv.height);
-    const worker = await getOcr();
-    const found = [];
-    for (const inv of [false, true]) {
-      const r = await worker.recognize(enhance(cv, inv));
-      (r.data.text || '').toUpperCase().replace(/[^A-Z0-9\s-]/g, ' ').split(/\s+/).forEach(t => {
-        t = t.replace(/^-+|-+$/g, ''); if (t.length < 6) return;
-        [t, fixDigits(t)].forEach(x => { if (found.indexOf(x) < 0) found.push(x); });
-      });
-    }
-    const known = found.filter(isKnown), other = found.filter(x => !isKnown(x)).slice(0, 6);
-    const btn = (t, k) => '<div class="row"><button' + (k ? ' class="pri"' : '') + ' data-ocr="' + esc(t) + '">' + (k ? '✓ ' : '') + esc(t) + '</button></div>';
-    $('srchList').innerHTML = (known.length || other.length)
-      ? '<p class="note">' + (known.length ? 'الأرقام اللي عليها ✓ موجودة في السيستم:' : 'مفيش رقم مطابق للسيستم، اختار الأقرب أو صوّر تاني:') + '</p>' + known.map(t => btn(t, 1)).join('') + other.map(t => btn(t, 0)).join('')
-      : '<p class="note">معرفتش أقرأ رقم، حط الرقم جوه الإطار بإضاءة كويسة وحاول تاني.</p>';
-  } catch (err) { $('srchList').innerHTML = '<p class="note">فشل: ' + esc(err.message) + '</p>'; }
-};
-
 /* ====== admin report ====== */
 let lastRep = null;
-function fillRepDay() {
-  const keep = $('repDay').value;
-  $('repDay').innerHTML = DAYS.concat(['All']).map(d => '<option value="' + d + '">' + DAY_AR[d] + '</option>').join('');
-  $('repDay').value = keep || (isValidCat(cat) && cat.day) || 'Sat';
+const pct = (a, b) => b ? Math.round(a * 100 / b) : 0;
+const cut = (s, n) => { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
+function repDayName(R) { return DAY_AR[R.day] || R.day; }
+function missLine(x) {
+  const d = x.sys - x.act;
+  return cut(x.d, 45) + ' · ' + x.i + (x.s ? ' · ' + x.s : '') + (x.sys > 1 || x.act > 0 ? ' · مطلوب ' + x.sys + ' اتعد ' + x.act : ' · لم يُجرد');
 }
-function repText(r) {
-  const L = [], CAP = 40;
-  const line = x => '• ' + x.d + ' [' + x.i + (x.s ? ' / ' + x.s : '') + ']';
-  L.push('تقرير جرد ' + (DAY_AR[r.day] || r.day) + ' — Dream 2000 السيوف');
-  L.push(r.at);
-  L.push('في الجرد: ' + r.totals.inScope + ' | تمام: ' + r.totals.match + ' | غير مجرد: ' + r.totals.notCounted + ' | ناقص: ' + r.totals.short + ' | زيادة: ' + r.totals.over);
-  r.groups.forEach(g => {
-    if (!g.nc.length && !g.sh.length && !g.ov.length) return;
-    L.push(''); L.push('*' + g.ic + '* (' + g.match + '/' + g.total + ' تمام)');
-    if (g.nc.length) { L.push('غير مجرد (' + g.nc.length + '):'); g.nc.slice(0, CAP).forEach(x => L.push(line(x) + ' نظام ' + x.sys)); if (g.nc.length > CAP) L.push('... و ' + (g.nc.length - CAP) + ' كمان'); }
-    if (g.sh.length) { L.push('ناقص (' + g.sh.length + '):'); g.sh.slice(0, CAP).forEach(x => L.push(line(x) + ' نظام ' + x.sys + ' / فعلي ' + x.act)); if (g.sh.length > CAP) L.push('... و ' + (g.sh.length - CAP) + ' كمان'); }
-    if (g.ov.length) { L.push('زيادة (' + g.ov.length + '):'); g.ov.slice(0, CAP).forEach(x => L.push(line(x) + ' نظام ' + x.sys + ' / فعلي ' + x.act)); if (g.ov.length > CAP) L.push('... و ' + (g.ov.length - CAP) + ' كمان'); }
+function repText(R, full) {
+  const T = R.totals, L = [];
+  L.push('📊 تقرير جرد Dream 2000 - Seyouf');
+  L.push('اليوم: ' + repDayName(R) + ' | آخر استوك: ' + (R.stockAt || '—'));
+  L.push('التقدم: ' + T.done + '/' + T.units + ' (' + pct(T.done, T.units) + '%)');
+  L.push('✅ مطابق: ' + T.match + ' | ❌ عجز: ' + T.short + ' (' + T.shortQty + ' قطعة، منها ' + T.uncounted + ' لم يُجرد) | ⚠️ زيادة: ' + T.over + ' (' + T.overQty + ' قطعة)');
+  L.push('');
+  L.push('— حسب التصنيف —');
+  R.groups.forEach(g => {
+    L.push('• ' + g.name + ': ' + g.done + '/' + g.units + ' (' + pct(g.done, g.units) + '%)' + (g.shortQty ? ' | ناقص ' + g.shortQty : '') + (g.overQty ? ' | زيادة ' + g.overQty : ''));
+    if (full) {
+      g.miss.slice(0, 10).forEach(x => L.push('   - ' + missLine(x)));
+      if (g.miss.length > 10 || g.missMore) L.push('   ... و ' + (g.short - 10) + ' صنف تاني');
+    }
   });
-  if (r.nis.length) { L.push(''); L.push('*سكانات مش في السيستم (' + r.nis.length + '):*'); r.nis.slice(0, CAP).forEach(x => L.push('• ' + x.v + ' × ' + x.q + ' (' + x.e + ')')); }
+  if (full && R.groups.some(g => g.overs.length)) {
+    L.push(''); L.push('— الزيادات —');
+    R.groups.forEach(g => g.overs.slice(0, 5).forEach(x => L.push('• ' + cut(x.d, 45) + ' · ' + x.i + ' · مطلوب ' + x.sys + ' اتعد ' + x.act)));
+  }
+  if (R.notInSystem.length) {
+    L.push(''); L.push('— اتسكن وهو مش في السيستم (' + R.notInSystem.length + ') —');
+    R.notInSystem.slice(0, full ? 20 : 5).forEach(x => L.push('• ' + x.v + ' × ' + x.q));
+  }
+  if (R.emps.length) { L.push(''); L.push('👥 الموظفين: ' + R.emps.map(x => x.e + ' (' + x.q + ')').join('، ')); }
+  L.push('آخر تحديث: ' + R.at);
   return L.join('\n');
 }
+function renderRep() {
+  const R = lastRep, T = R.totals;
+  $('repTitle').textContent = 'تقرير جرد ' + repDayName(R);
+  $('repNote').textContent = 'آخر استوك: ' + (R.stockAt || '—') + ' · تحديث: ' + R.at;
+  let h = '<div class="kpi">' +
+    '<div><b>' + pct(T.done, T.units) + '%</b><span>' + T.done + ' / ' + T.units + ' اتعد</span></div>' +
+    '<div class="g"><b>' + T.match + '</b><span>مطابق</span></div>' +
+    '<div class="r"><b>' + T.shortQty + '</b><span>ناقص (' + T.uncounted + ' لم يُجرد)</span></div>' +
+    '<div class="w"><b>' + T.overQty + '</b><span>زيادة (' + T.over + ' صنف)</span></div>' +
+    '<div><b>' + R.notInSystem.length + '</b><span>مش في السيستم</span></div>' +
+    '<div><b>' + R.emps.length + '</b><span>موظف</span></div></div>';
+  if (R.days.length) h += '<div class="sub">التقدم حسب اليوم (الأسبوع كله)</div><div>' + R.days.map(d => '<span class="pc' + (d.total && d.done >= d.total ? ' ok' : '') + '">' + (DAY_AR[d.d] || d.d) + ' ' + d.done + '/' + d.total + '</span>').join('') + '</div>';
+  h += '<div class="sub">حسب التصنيف</div>';
+  h += R.groups.length ? R.groups.map(g =>
+    '<details class="grp"><summary>' + esc(g.name) + ' · ' + g.done + '/' + g.units + ' (' + pct(g.done, g.units) + '%)' +
+    (g.shortQty ? ' · <span style="color:#f87171">ناقص ' + g.shortQty + '</span>' : ' · ✅') + (g.overQty ? ' · <span style="color:#fbbf24">زيادة ' + g.overQty + '</span>' : '') +
+    '</summary><div class="pbar"><i style="width:' + pct(g.done, g.units) + '%"></i></div>' +
+    (g.miss.length ? '<div class="sub">العجز / لم يُجرد</div>' + g.miss.map(x => '<div class="it bad"><div class="v">' + esc(x.d) + '</div><div class="m">' + esc(x.i) + (x.s ? ' · ' + esc(x.s) : '') + ' · مطلوب ' + x.sys + ' · اتعد ' + x.act + '</div></div>').join('') + (g.missMore ? '<p class="note">+ ' + g.missMore + ' صنف تاني مش ظاهرين</p>' : '') : '') +
+    (g.overs.length ? '<div class="sub">الزيادة</div>' + g.overs.map(x => '<div class="it warn"><div class="v">' + esc(x.d) + '</div><div class="m">' + esc(x.i) + (x.s ? ' · ' + esc(x.s) : '') + ' · مطلوب ' + x.sys + ' · اتعد ' + x.act + '</div></div>').join('') : '') +
+    '</details>').join('') : '<p class="note">مفيش أصناف في جرد اليوم ده.</p>';
+  if (R.notInSystem.length) h += '<div class="sub">اتسكن وهو مش في السيستم</div>' + R.notInSystem.map(x => '<div class="it bad"><div class="v">' + esc(x.v) + ' × ' + x.q + '</div></div>').join('');
+  if (R.emps.length) h += '<div class="sub">الموظفين (كل سكانات الأسبوع)</div><div>' + R.emps.map(x => '<span class="pc">' + esc(x.e) + ' · ' + x.q + '</span>').join('') + '</div>';
+  $('repBody').innerHTML = h;
+  $('repMsg').textContent = '';
+}
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); return true; }
+  catch (e) {
+    const a = document.createElement('textarea'); a.value = t; a.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(a); a.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch (_) {} a.remove(); return ok;
+  }
+}
 $('repBtn').onclick = async () => {
-  const r = await adm({ action: 'report', day: $('repDay').value }, () => 'التقرير جاهز ✓');
-  if (r) { lastRep = r.report; $('repOut').textContent = repText(lastRep); }
+  const r = await adm({ action: 'report', day: $('selRepDay').value }, () => 'التقرير جاهز ✓');
+  if (r && r.report) { lastRep = r.report; renderRep(); $('rep').classList.remove('hide'); }
 };
-$('repCopy').onclick = async () => {
-  const t = $('repOut').textContent;
-  if (!t) { $('admMsg').textContent = 'اعرض التقرير الأول'; return; }
-  try { await navigator.clipboard.writeText(t); $('admMsg').textContent = 'اتنسخ ✓'; }
-  catch (e) { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); document.execCommand('copy'); a.remove(); $('admMsg').textContent = 'اتنسخ ✓'; }
-};
-$('repWa').onclick = () => {
-  const t = $('repOut').textContent;
-  if (!t) { $('admMsg').textContent = 'اعرض التقرير الأول'; return; }
-  window.open('https://wa.me/?text=' + encodeURIComponent(t), '_blank');
-};
+$('repCopy').onclick = async () => { $('repMsg').textContent = (await copyText(repText(lastRep, false))) ? 'اتنسخ ✓ الصقه في واتساب' : 'النسخ فشل: استخدم زرار واتساب'; };
+$('repCopyFull').onclick = async () => { $('repMsg').textContent = (await copyText(repText(lastRep, true))) ? 'اتنسخ التقرير التفصيلي ✓' : 'النسخ فشل: استخدم زرار واتساب'; };
+$('repWa').onclick = () => { window.open('https://wa.me/?text=' + encodeURIComponent(repText(lastRep, false)), '_blank'); };
+$('repClose').onclick = () => $('rep').classList.add('hide');
 
 /* ====== boot ====== */
 document.querySelectorAll('.logoImg').forEach(i => {
@@ -946,7 +881,7 @@ if (cat && !isValidCat(cat)) {
   LS.set('cat', null);
 }
 if (cat) indexCat(cat);
-flush();
+if (emp) enter();
 </script>
 </body>
 </html>
