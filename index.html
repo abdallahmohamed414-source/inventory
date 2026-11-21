@@ -109,8 +109,8 @@ button:disabled{opacity:.5}
   <div id="res"><span class="note">وجّه الكاميرا على الباركود</span></div>
 
   <div class="row seg">
-    <button id="mCode">كود</button>
-    <button id="mSerial">سيريال</button>
+    <button id="scanBarBtn" class="on">اسكان الباركود</button>
+    <button id="scanNumBtn">اسكان الرقم (لو الباركود تالف)</button>
   </div>
 
   <div class="note">الكمية للسكان الجاي (ترجع 1 بعد كل سكان)</div>
@@ -124,18 +124,10 @@ button:disabled{opacity:.5}
     <input id="manual" type="text" autocomplete="off" placeholder="اكتب الكود/السيريال واضغط Enter">
     <button id="addBtn" style="flex:0 0 auto">+</button>
   </div>
-    <div class="row">
-    <input id="manual" type="text" autocomplete="off" placeholder="اكتب الكود/السيريال واضغط Enter">
-    <button id="addBtn" style="flex:0 0 auto">+</button>
+  <div class="row">
+    <input id="srch" type="text" autocomplete="off" placeholder="بحث بالاسم">
   </div>
-
-  <!-- ===== الجديد: ابدأ من هنا ===== -->
-  <div class="row"><input id="srch" type="text" autocomplete="off" placeholder="ابحث بالاسم لو الباركود تالف"><button id="ocrBtn" style="flex:0 0 auto">📷 صوّر الرقم</button></div>
-  <input id="ocrFile" type="file" accept="image/*" capture="environment" class="hide">
   <div id="srchList"></div>
-  <!-- ===== الجديد: انتهى ===== -->
-
-  <div class="row"><button id="againBtn">+ كرر آخر سكان</button><button id="undoBtn" class="danger">↩ تراجع</button></div>
   <div class="row"><button id="againBtn">+ كرر آخر سكان</button><button id="undoBtn" class="danger">↩ تراجع</button></div>
   <div class="row"><button id="adminBtn">أدمن</button></div>
 
@@ -157,10 +149,6 @@ button:disabled{opacity:.5}
   <h1>الأدمن</h1>
   <div id="pinBox">
     <input id="pin" type="password" inputmode="numeric" placeholder="PIN">
-    <h3>6) تقرير الأدمن</h3>
-<div class="row"><select id="repDay" aria-label="اليوم"></select><button id="repBtn" style="flex:0 0 auto">عرض</button></div>
-<pre id="repOut" class="note" style="white-space:pre-wrap;direction:rtl;font-family:inherit"></pre>
-<div class="row"><button class="pri hide" id="repCopy">نسخ للواتساب</button><button class="hide" id="repWa">فتح واتساب</button></div>
     <div class="row"><button class="pri" id="pinOk">فتح</button><button id="admClose0">رجوع</button></div>
   </div>
   <div id="admBox" class="hide">
@@ -192,6 +180,11 @@ button:disabled{opacity:.5}
     <div class="row"><button class="pri" id="dcBtn">إنهاء جرد اليوم وحفظ التقرير</button></div>
     <div class="row"><button class="pri" id="wkBtn">إغلاق الأسبوع وحفظ في History</button></div>
     <div class="row"><button class="danger" id="clrBtn">مسح كل السكانات</button></div>
+    <h3>6) تقرير الأدمن</h3>
+    <p class="note">غير مجرد، ناقص، وزيادة حسب الكاتجري لليوم المحدد.</p>
+    <div class="row"><select id="repDay" aria-label="يوم التقرير"></select><button class="pri" id="repBtn" style="flex:0 0 auto">عرض</button></div>
+    <div class="row"><button id="repCopy">نسخ</button><button id="repWa">فتح واتساب</button></div>
+    <pre id="repOut" class="note" style="white-space:pre-wrap;word-break:break-word;user-select:text"></pre>
     <div class="row"><button id="admClose">رجوع</button></div>
   </div>
   <p id="admMsg" class="note"></p>
@@ -222,7 +215,7 @@ async function apiGet(q) {
 
 /* ====== state ====== */
 let emp = LS.get('emp', '');
-let mode = LS.get('mode', 'code');
+let mode = 'code';
 let qty = 1, keepQty = false;
 let cat = LS.get('cat', null);
 let myRules = LS.get('myRules', []);
@@ -599,11 +592,6 @@ async function toggleTorch() {
 }
 
 /* ====== UI wiring ====== */
-function renderMode() {
-  $('mCode').classList.toggle('on', mode === 'code');
-  $('mSerial').classList.toggle('on', mode === 'serial');
-  LS.set('mode', mode);
-}
 function renderQty() {
   const opts = [1, 2, 3, 5, 10];
   $('qtyChips').innerHTML = opts.map(n => '<span class="chip' + (qty === n ? ' on' : '') + '" data-q="' + n + '">' + n + '</span>').join('');
@@ -613,8 +601,6 @@ function renderQty() {
 $('qtyChips').addEventListener('click', e => { const q = e.target.dataset.q; if (q) { qty = Number(q); renderQty(); } });
 $('qtyCustom').addEventListener('input', e => { const n = Math.floor(Number(e.target.value)); if (n >= 1) { qty = n; renderQty(); } });
 $('keepBtn').onclick = () => { keepQty = !keepQty; renderQty(); };
-$('mCode').onclick = () => { mode = 'code'; renderMode(); };
-$('mSerial').onclick = () => { mode = 'serial'; renderMode(); };
 $('camBtn').onclick = () => camOn ? stopCam() : startCam();
 $('torchBtn').onclick = toggleTorch;
 $('addBtn').onclick = () => { const v = $('manual').value; $('manual').value = ''; handleScan(v); };
@@ -671,7 +657,7 @@ $('pickGo').onclick = () => {
   if (!myRules.length) myRules = cat.rules.map(ruleKey);
   LS.set('myRules', myRules);
   $('pick').classList.add('hide'); $('main').classList.remove('hide');
-  renderMode(); renderQty(); renderList(); renderScope(); renderProgAll(); startCam();
+  renderQty(); renderList(); renderScope(); renderProgAll(); startCam();
 };
 $('pickOut').onclick = () => { $('pick').classList.add('hide'); $('login').classList.remove('hide'); };
 $('chgCat').onclick = e => { e.preventDefault(); showPick(); };
@@ -703,7 +689,7 @@ async function adm(body, ok) {
 function renderAdmin() {
   if (!isValidCat(cat)) {
     $('admMsg').textContent = 'تعذر تحميل بيانات الكتالوج. اتأكد من النت ورابط السيرفر.';
-    return;fillRepDay();
+    return;
   }
   $('stockAt').textContent = 'آخر استيراد استوك: ' + (cat.stockAt || 'لسه محصلش');
   $('mapAt').textContent = (cat.hasMap ? 'ملف الـ Class اترفع: ' + cat.mapAt + '. ' : 'الـ Inventory Class مربوط تلقائي من شيت الاستوك. ارفع ملف Stock Items لو عايز التخصيص اليدوي. ') + (cat.unmatched ? 'أصناف من غير Class: ' + cat.unmatched : '');
@@ -714,6 +700,7 @@ function renderAdmin() {
   $('selIc').disabled = !cat.ics.length;
   $('selC8').innerHTML = '<option value="*">كل الأصناف (Class 8)</option>' + cat.classes.map(c => '<option value="' + esc(c.name) + '">' + esc(catLabel(c.name)) + ' (' + c.count + ')</option>').join('');
   $('selDay').innerHTML = '<option value="">تلقائي (النهارده)</option>' + DAYS.map(d => '<option value="' + d + '">' + DAY_AR[d] + '</option>').join('');
+  fillRepDay();
 }
 
 function renderRules() {
@@ -723,7 +710,7 @@ function renderRules() {
     : '<p class="note">مفيش حاجة متحددة ليوم ' + DAY_AR[selDay] + '.</p>';
 }
 
-$('dayChips').addEventListener('click', e => { const d = e.target.dataset.d; if (d) { selDay = d; renderAdmin();fillRepDay(); } });
+$('dayChips').addEventListener('click', e => { const d = e.target.dataset.d; if (d) { selDay = d; renderAdmin(); } });
 $('rules').addEventListener('click', e => { const i = e.target.dataset.i; if (i !== undefined) { sched.splice(Number(i), 1); renderRules(); } });
 
 $('addRule').onclick = () => {
@@ -748,7 +735,7 @@ $('pinOk').onclick = async () => {
     if (!isValidCat(cat)) throw new Error('فشل تحميل البيانات من الشيت');
     $('pinBox').classList.add('hide'); $('admBox').classList.remove('hide'); $('admMsg').textContent = '';
     sched = (cat.schedule || []).slice(); renderAdmin();
-  } catch (e) { $('admMsg').textContent = 'PIN غلط أو مفيش اتصال: ' + e.message;fillRepDay(); }
+  } catch (e) { $('admMsg').textContent = 'PIN غلط أو مفيش اتصال: ' + e.message; }
 };
 
 function sendFile(inputId, action, okMsg) {
@@ -760,7 +747,7 @@ function sendFile(inputId, action, okMsg) {
     const r = await adm({ action, name: f.name, b64: String(fr.result).split(',')[1] }, x => okMsg(x.summary));
     if (r) {
       await loadCatalog();
-      if (isValidCat(cat)) { sched = (cat.schedule || []).slice(); renderAdmin();fillRepDay();}
+      if (isValidCat(cat)) { sched = (cat.schedule || []).slice(); renderAdmin(); }
     }
   };
   fr.readAsDataURL(f);
@@ -784,111 +771,107 @@ $('clrBtn').onclick = async () => {
   const r = await adm({ action: 'clearScans' }, () => 'اتمسحت ✓');
   if (r) { seenSerials = {}; LS.set('seenSerials', {}); recent = []; renderList(); }
 };
-  /* ====== name search + OCR ====== */
-let srchT = null, ocrLoading = null;
-function searchItems(q) {
-  const toks = q.toUpperCase().split(/\s+/).filter(Boolean), out = [];
-  if (!toks.length || !isValidCat(cat)) return out;
-  for (const it of cat.items) {
-    const hay = (it.d + ' ' + it.i + ' ' + it.s.join(' ')).toUpperCase();
-    if (toks.every(t => hay.indexOf(t) >= 0)) { out.push(it); if (out.length >= 60) break; }
-  }
-  return out.sort((a, b) => (b.y ? 1 : 0) - (a.y ? 1 : 0)).slice(0, 15);
-}
+
+/* ====== name search + OCR ====== */
+function scanAs(type, value) { const m = mode; mode = type; handleScan(value); mode = m; }
 function renderSearch() {
-  const q = $('srch').value.trim();
-  if (q.length < 2) { $('srchList').innerHTML = ''; return; }
-  const list = searchItems(q);
-  $('srchList').innerHTML = list.length ? list.map(it => {
-    let act;
-    if (it.s.length) {
-      const left = it.s.filter(s => !isDone(it.i.toUpperCase() + '|' + s.toUpperCase()));
-      act = left.length
-        ? left.slice(0, 12).map(s => '<button class="remBtn" data-sv="' + esc(s) + '">' + esc(s) + '</button>').join(' ') + (left.length > 12 ? ' <span class="m">+' + (left.length - 12) + '</span>' : '')
-        : '<span class="m">كل السيريالات اتعدّت ✅</span>';
-    } else act = '<button class="remBtn pri" data-id="' + esc(it.i) + '">+ عدّ (× ' + qty + ')</button>';
-    return '<div class="it ' + (it.y ? '' : 'warn') + '"><div class="v">' + esc(it.d) + '</div><div class="m">' + esc(it.i) + (it.y ? '' : ' · خارج الجرد') + '</div><div style="margin-top:6px">' + act + '</div></div>';
+  const q = $('srch').value.trim().toUpperCase();
+  const box = $('srchList');
+  if (!q || !isValidCat(cat)) { box.innerHTML = ''; return; }
+  const words = q.split(/\s+/);
+  const hits = cat.items.filter(it => it.y && words.every(w => (it.d + ' ' + it.i).toUpperCase().indexOf(w) >= 0)).slice(0, 8);
+  box.innerHTML = hits.length ? hits.map(it => {
+    const left = it.s.filter(s => !isDone(it.i.toUpperCase() + '|' + s.toUpperCase()));
+    let h = '<div class="it"><div class="v">' + esc(it.d) + '</div><div class="m">' + esc(it.i) + (it.s.length ? ' · متبقي ' + left.length + ' سيريال' : '') + '</div>';
+    if (!it.s.length) h += '<div class="row"><button class="pri" data-sid="' + esc(it.i) + '">عدّ × ' + qty + '</button></div>';
+    else h += left.slice(0, 12).map(s => '<div class="row"><button data-sser="' + esc(s) + '">' + esc(s) + '</button></div>').join('');
+    return h + '</div>';
   }).join('') : '<p class="note">مفيش نتايج.</p>';
 }
-$('srch').addEventListener('input', () => { clearTimeout(srchT); srchT = setTimeout(renderSearch, 250); });
+$('srch').addEventListener('input', renderSearch);
 $('srchList').addEventListener('click', e => {
-  const b = e.target.closest('button'); if (!b) return;
-  const v = b.dataset.sv || b.dataset.id; if (!v) return;
-  handleScan(v); renderSearch();
+  const a = e.target.closest('[data-sid]'), b = e.target.closest('[data-sser]'), c = e.target.closest('[data-ocr]');
+  if (a) { scanAs('code', a.dataset.sid); renderSearch(); }
+  else if (b) { scanAs('serial', b.dataset.sser); renderSearch(); }
+  else if (c) { scanAs('code', c.dataset.ocr); $('srchList').innerHTML = ''; setScanTab(false); }
 });
-
-function loadOcr() {
+let tessLoading = null;
+function loadTess() {
   if (window.Tesseract) return Promise.resolve();
-  return ocrLoading = ocrLoading || new Promise((ok, no) => {
+  return tessLoading || (tessLoading = new Promise((ok, no) => {
     const s = document.createElement('script');
     s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
-    s.onload = ok; s.onerror = () => { ocrLoading = null; no(new Error('محتاج نت')); };
+    s.onload = ok; s.onerror = () => { tessLoading = null; no(new Error('تعذر تحميل OCR')); };
     document.head.appendChild(s);
-  });
+  }));
 }
-async function runOcr(file) {
-  $('res').innerHTML = '<span class="note">جاري قراءة الرقم... (أول مرة بتاخد وقت أطول)</span>';
+function setScanTab(num) { $('scanBarBtn').classList.toggle('on', !num); $('scanNumBtn').classList.toggle('on', num); }
+$('scanBarBtn').onclick = () => { setScanTab(false); $('srchList').innerHTML = ''; if (!camOn) startCam(); };
+$('scanNumBtn').onclick = async () => {
+  setScanTab(true);
+  const v = $('vid');
+  if (!camOn || !v.videoWidth) { await startCam(); $('srchList').innerHTML = '<p class="note">الكاميرا اتشغلت: قرّب الرقم جوه الإطار واضغط اسكان الرقم تاني.</p>'; return; }
+  $('srchList').innerHTML = '<p class="note">جاري قراءة الرقم... ثبّت الموبايل</p>';
   try {
-    await loadOcr();
-    const w = await Tesseract.createWorker('eng');
-    await w.setParameters({ tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-/' });
-    const { data } = await w.recognize(file);
-    await w.terminate();
-    const toks = (data.text.toUpperCase().match(/[A-Z0-9][A-Z0-9\-\/]{3,}/g) || []).sort((a, b) => b.length - a.length);
-    for (const t of toks) for (const v of [t, t.replace(/O/g, '0')]) {
-      if (cat.byId[v] || cat.bySerial[v]) { handleScan(v); return; }
-    }
-    $('srch').value = toks[0] || ''; renderSearch();
-    $('res').innerHTML = toks.length
-      ? 'قرأت: <b>' + esc(toks.slice(0, 3).join(' · ')) + '</b><small>مفيش تطابق مباشر، شوف نتايج البحث تحت أو صحّح الرقم</small>'
-      : '<span class="note">مقدرتش أقرأ رقم: قرّب وصوّر الرقم بس.</span>';
-  } catch (e) { $('res').innerHTML = '<span class="note">فشل قراءة الرقم: ' + esc(e.message) + '</span>'; }
-}
-$('ocrBtn').onclick = () => { $('ocrFile').value = ''; $('ocrFile').click(); };
-$('ocrFile').onchange = async e => {
-  const f = e.target.files[0]; if (!f) return;
-  await runOcr(f);
-  stopCam(); startCam();
+    const vw = v.videoWidth, vh = v.videoHeight, ar = 4 / 3;
+    let sw = vw, sh = vh, ox = 0, oy = 0;
+    if (vw / vh > ar) { sw = vh * ar; ox = (vw - sw) / 2; } else { sh = vw / ar; oy = (vh - sh) / 2; }
+    const cx = ox + sw * 0.08, cy = oy + sh * 0.25, cw = sw * 0.84, ch = sh * 0.5;
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(cw * 1.5); cv.height = Math.round(ch * 1.5);
+    const g = cv.getContext('2d');
+    g.filter = 'grayscale(1) contrast(1.5)';
+    g.drawImage(v, cx, cy, cw, ch, 0, 0, cv.width, cv.height);
+    await loadTess();
+    const r = await Tesseract.recognize(cv, 'eng');
+    const toks = (r.data.text || '').toUpperCase().replace(/[^A-Z0-9\s-]/g, ' ').split(/\s+/)
+      .map(t => t.replace(/^-+|-+$/g, '')).filter(t => t.length >= 6);
+    const uniq = toks.filter((t, i) => toks.indexOf(t) === i).slice(0, 8);
+    $('srchList').innerHTML = uniq.length
+      ? '<p class="note">اختار الرقم الصح:</p>' + uniq.map(t => '<div class="row"><button data-ocr="' + esc(t) + '">' + esc(t) + '</button></div>').join('')
+      : '<p class="note">معرفتش أقرأ رقم، حط الرقم جوه الإطار بإضاءة كويسة وحاول تاني.</p>';
+  } catch (err) { $('srchList').innerHTML = '<p class="note">فشل: ' + esc(err.message) + '</p>'; }
 };
+
 /* ====== admin report ====== */
-let repTxt = '';
+let lastRep = null;
 function fillRepDay() {
-  if ($('repDay').options.length) return;
-  $('repDay').innerHTML = '<option value="">اليوم الحالي</option>' +
-    DAYS.map(d => '<option value="' + d + '">' + DAY_AR[d] + '</option>').join('') + '<option value="*">كل الأسبوع</option>';
+  const keep = $('repDay').value;
+  $('repDay').innerHTML = DAYS.concat(['All']).map(d => '<option value="' + d + '">' + DAY_AR[d] + '</option>').join('');
+  $('repDay').value = keep || (isValidCat(cat) && cat.day) || 'Sat';
 }
 function repText(r) {
-  const CAP = 25, t = r.totals, L = [];
-  const line = x => '• ' + x[2].slice(0, 40) + (x[1] ? ' (' + x[1] + ')' : ' [' + x[0] + ']') + (x[1] ? '' : ' النظام ' + x[3] + ' / الفعلي ' + x[4]);
-  const part = (title, arr) => {
-    if (!arr.length) return;
-    L.push(title + ' (' + arr.length + '):');
-    arr.slice(0, CAP).forEach(x => L.push(line(x)));
-    if (arr.length > CAP) L.push('… و ' + (arr.length - CAP) + ' أخرى');
-  };
-  L.push('📊 تقرير جرد ' + (r.day === '*' ? 'الأسبوع' : (DAY_AR[r.day] || r.day)) + ' - ' + r.at);
-  L.push('✅ تمام ' + t.match + ' | ❌ غير مجرد ' + t.unc + ' | ⚠️ ناقص ' + t.short + ' | ➕ زيادة ' + t.over);
+  const L = [], CAP = 40;
+  const line = x => '• ' + x.d + ' [' + x.i + (x.s ? ' / ' + x.s : '') + ']';
+  L.push('تقرير جرد ' + (DAY_AR[r.day] || r.day) + ' — Dream 2000 السيوف');
+  L.push(r.at);
+  L.push('في الجرد: ' + r.totals.inScope + ' | تمام: ' + r.totals.match + ' | غير مجرد: ' + r.totals.notCounted + ' | ناقص: ' + r.totals.short + ' | زيادة: ' + r.totals.over);
   r.groups.forEach(g => {
-    if (!g.unc.length && !g.short.length && !g.over.length) return;
-    L.push('', '▪️ ' + g.name + ' (اتجرد ' + g.counted + ' من ' + g.total + ')');
-    part('❌ غير مجرد', g.unc); part('⚠️ ناقص', g.short); part('➕ زيادة', g.over);
+    if (!g.nc.length && !g.sh.length && !g.ov.length) return;
+    L.push(''); L.push('*' + g.ic + '* (' + g.match + '/' + g.total + ' تمام)');
+    if (g.nc.length) { L.push('غير مجرد (' + g.nc.length + '):'); g.nc.slice(0, CAP).forEach(x => L.push(line(x) + ' نظام ' + x.sys)); if (g.nc.length > CAP) L.push('... و ' + (g.nc.length - CAP) + ' كمان'); }
+    if (g.sh.length) { L.push('ناقص (' + g.sh.length + '):'); g.sh.slice(0, CAP).forEach(x => L.push(line(x) + ' نظام ' + x.sys + ' / فعلي ' + x.act)); if (g.sh.length > CAP) L.push('... و ' + (g.sh.length - CAP) + ' كمان'); }
+    if (g.ov.length) { L.push('زيادة (' + g.ov.length + '):'); g.ov.slice(0, CAP).forEach(x => L.push(line(x) + ' نظام ' + x.sys + ' / فعلي ' + x.act)); if (g.ov.length > CAP) L.push('... و ' + (g.ov.length - CAP) + ' كمان'); }
   });
-  if (r.nis.length) { L.push('', '🚫 سكانات مش في السيستم (' + r.nis.length + '):'); r.nis.slice(0, CAP).forEach(x => L.push('• ' + x[0] + ' × ' + x[1])); }
+  if (r.nis.length) { L.push(''); L.push('*سكانات مش في السيستم (' + r.nis.length + '):*'); r.nis.slice(0, CAP).forEach(x => L.push('• ' + x.v + ' × ' + x.q + ' (' + x.e + ')')); }
   return L.join('\n');
 }
 $('repBtn').onclick = async () => {
-  const r = await adm({ action: 'report', day: $('repDay').value }, () => '');
-  if (!r) return;
-  repTxt = repText(r.report);
-  $('repOut').textContent = repTxt;
-  $('repCopy').classList.remove('hide'); $('repWa').classList.remove('hide');
-  $('admMsg').textContent = 'التقرير جاهز ✓';
+  const r = await adm({ action: 'report', day: $('repDay').value }, () => 'التقرير جاهز ✓');
+  if (r) { lastRep = r.report; $('repOut').textContent = repText(lastRep); }
 };
 $('repCopy').onclick = async () => {
-  try { await navigator.clipboard.writeText(repTxt); $('admMsg').textContent = 'اتنسخ ✓'; }
-  catch (e) { const s = window.getSelection(), g = document.createRange(); g.selectNodeContents($('repOut')); s.removeAllRanges(); s.addRange(g); $('admMsg').textContent = 'حدد النص واضغط نسخ يدويًا'; }
+  const t = $('repOut').textContent;
+  if (!t) { $('admMsg').textContent = 'اعرض التقرير الأول'; return; }
+  try { await navigator.clipboard.writeText(t); $('admMsg').textContent = 'اتنسخ ✓'; }
+  catch (e) { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); document.execCommand('copy'); a.remove(); $('admMsg').textContent = 'اتنسخ ✓'; }
 };
-$('repWa').onclick = () => window.open('https://wa.me/?text=' + encodeURIComponent(repTxt), '_blank');
+$('repWa').onclick = () => {
+  const t = $('repOut').textContent;
+  if (!t) { $('admMsg').textContent = 'اعرض التقرير الأول'; return; }
+  window.open('https://wa.me/?text=' + encodeURIComponent(t), '_blank');
+};
+
 /* ====== boot ====== */
 document.querySelectorAll('.logoImg').forEach(i => {
   i.onerror = () => { const d = document.createElement('div'); d.className = 'logoTxt'; d.textContent = 'DREAM 2000'; i.replaceWith(d); };
