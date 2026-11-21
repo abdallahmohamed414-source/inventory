@@ -168,20 +168,23 @@ button:disabled{opacity:.5}
     <p class="note" id="ruleHint"></p>
     <div class="row"><button id="addRule">+ إضافة لليوم المحدد</button><button class="pri" id="saveSched">حفظ الجدول</button></div>
 
-    <h3>3) ربط الـ Inventory Class (اختياري)</h3>
+    <div class="hide">
+    <h3>ربط الـ Inventory Class (اختياري)</h3>
     <p class="note" id="mapAt"></p>
     <input id="mapFile" type="file" accept=".xlsx,.xls">
     <div class="row"><button id="mapBtn">رفع ملف الـ Class</button></div>
 
-    <h3>4) اليوم المستخدم في الجرد</h3>
+    </div>
+
+    <h3>3) اليوم المستخدم في الجرد</h3>
     <div class="row"><select id="selDay" aria-label="اليوم"></select><button id="dayBtn" style="flex:0 0 auto">حفظ</button></div>
 
-    <h3>5) أدوات</h3>
+    <h3>4) أدوات</h3>
     <div class="row"><button id="refBtn">تحديث المقارنة</button></div>
     <div class="row"><button class="pri" id="dcBtn">إنهاء جرد اليوم وحفظ التقرير</button></div>
     <div class="row"><button class="pri" id="wkBtn">إغلاق الأسبوع وحفظ في History</button></div>
     <div class="row"><button class="danger" id="clrBtn">مسح كل السكانات</button></div>
-    <h3>6) تقرير الأدمن</h3>
+    <h3>5) تقرير الأدمن</h3>
     <p class="note">غير مجرد، ناقص، وزيادة حسب الكاتجري لليوم المحدد.</p>
     <div class="row"><select id="repDay" aria-label="يوم التقرير"></select><button class="pri" id="repBtn" style="flex:0 0 auto">عرض</button></div>
     <div class="row"><button id="repCopy">نسخ</button><button id="repWa">فتح واتساب</button></div>
