@@ -72,9 +72,20 @@ details.grp .pbar{margin:6px 0}
 .it.dim{opacity:.45;pointer-events:none}
 .tag{display:inline-block;padding:2px 8px;border-radius:999px;background:#374151;font-size:11px;margin-inline-start:6px}
 .tag.warn{background:var(--warn)}.tag.ok{background:#14532d}
+.toast{position:fixed;top:calc(env(safe-area-inset-top) + 10px);left:12px;right:12px;max-width:536px;margin:0 auto;background:var(--ok);color:#fff;padding:14px;border-radius:12px;text-align:center;font-size:17px;font-weight:bold;z-index:50;box-shadow:0 4px 16px rgba(0,0,0,.4)}
+.ovr{background:var(--card);border-radius:12px;padding:10px;margin:6px 0}
+.ovr .t{display:flex;justify-content:space-between;gap:8px;font-size:14px;margin-bottom:6px}
+html.light{--bg:#f3f4f6;--card:#fff;--tx:#111827;--mut:#6b7280}
+html.light button,html.light .chip,html.light .pc,html.light .tag,html.light .rule.on{color:#fff}
+html.light input,html.light select{border-color:#d1d5db}
+html.light .it{box-shadow:0 1px 3px rgba(0,0,0,.12)}
+html.light #chgCat{color:#2563eb!important}
+html.light .pbar{background:#e5e7eb}
+html.light .kpi .g b{color:#15803d}html.light .kpi .w b{color:#b45309}html.light .kpi .r b{color:#b91c1c}
 </style>
 </head>
 <body>
+<div id="toast" class="toast hide"></div>
 
 <!-- Login -->
 <section id="login">
@@ -84,7 +95,7 @@ details.grp .pbar{margin:6px 0}
   <p class="note">اكتب رقم الموظف (ID) عشان تبدأ.</p>
   <input id="empIn" type="text" inputmode="text" autocomplete="off" placeholder="رقم الموظف">
   <div class="row"><button class="pri" id="goBtn">دخول</button></div>
-  <div class="row"><button id="adminBtn0">أدمن</button></div>
+  <div class="row"><button id="adminBtn0">أدمن</button><button id="themeBtn0">☀️ وضع فاتح</button></div>
   <p id="loginMsg" class="note"></p>
   <div class="credit">نظام جرد المخزون · Dream 2000<br>تصميم وتطوير: <b>Abdallah Mohamed</b></div>
 </section>
@@ -103,7 +114,7 @@ details.grp .pbar{margin:6px 0}
 <!-- Main -->
 <section id="main" class="hide">
   <div class="bar">
-    <span>الموظف: <b id="empLbl"></b> · <a href="#" id="outBtn" style="color:var(--mut)">خروج</a></span>
+    <span>الموظف: <b id="empLbl"></b> · <a href="#" id="outBtn" style="color:var(--mut)">خروج</a> · <a href="#" id="themeBtn" style="color:var(--mut)">☀️ وضع فاتح</a></span>
     <span id="syncLbl"></span>
   </div>
   <div class="note"><span id="scopeLbl"></span> · <a href="#" id="chgCat" style="color:#93c5fd">غيّر</a></div>
@@ -159,7 +170,7 @@ details.grp .pbar{margin:6px 0}
   <h1 id="remTitle"></h1>
   <p class="note" id="remNote"></p>
   <input id="remSearch" type="text" autocomplete="off" placeholder="ابحث بالاسم أو الكود أو السيريال">
-  <div class="row"><button id="remRefresh">تحديث</button><button class="pri" id="remClose">رجوع</button></div>
+  <div class="row"><button id="remRefresh">تحديث</button><button id="remGroup">تجميع بالبراند</button><button class="pri" id="remClose">رجوع</button></div>
   <div id="remList"></div>
 </section>
 
@@ -392,18 +403,21 @@ function renderProgBox() {
     return '<span class="pc' + (fin ? ' ok' : '') + '">' + (fin ? '✅ ' : '⏳ ') + esc(ruleLabel(r)) + ' ' + p.done + '/' + p.total + '</span>';
   }).join('');
   const left = remainingUnits(rs).length;
-  $('progBox').innerHTML = chips + '<div class="row"><button id="remBtnMain">' + (left ? 'المتبقي (' + left + ')' : 'خلصت كل الأصناف ✅') + '</button></div>';
+  const o = overall(), op = o.t ? Math.round(o.d * 100 / o.t) : 0;
+  const ovr = '<div class="ovr"><div class="t"><span>التقدم العام: <b>' + op + '%</b> (' + o.d + '/' + o.t + ')</span><span>عدّيت النهارده: <b>' + myCount() + '</b></span></div><div class="pbar"><i style="width:' + op + '%"></i></div></div>';
+  $('progBox').innerHTML = ovr + chips + '<div class="row"><button id="remBtnMain">' + (left ? 'المتبقي (' + left + ')' : 'خلصت كل الأصناف ✅') + '</button></div>';
 }
 function renderRem() {
   const rules = cat.rules.filter(r => remKeys.indexOf(ruleKey(r)) >= 0);
   const all = remainingUnits(rules), q = $('remSearch').value.trim().toUpperCase();
-  const list = (q ? all.filter(x => (x.it.d + ' ' + x.it.i + ' ' + x.s).toUpperCase().indexOf(q) >= 0) : all.slice())
-    .sort((a, b) => a.it.d.localeCompare(b.it.d));
+  const list = (q ? all.filter(x => (x.it.d + ' ' + x.it.i + ' ' + x.s + ' ' + (x.it.b || '')).toUpperCase().indexOf(q) >= 0) : all.slice())
+    .sort((a, b) => (remByBrand ? brandOf(a.it).localeCompare(brandOf(b.it)) : 0) || a.it.d.localeCompare(b.it.d));
+  $('remGroup').textContent = remByBrand ? 'بدون تجميع' : 'تجميع بالبراند';
   $('remTitle').textContent = rules.length === 1 ? ruleLabel(rules[0]) : 'المتبقي';
   $('remNote').textContent = 'المتبقي: ' + all.length + ' · آخر تحديث من الشيت: ' + (progAt || '—');
   const MAX = 300;
   $('remList').innerHTML = list.length
-    ? list.slice(0, MAX).map(x => '<div class="it warn"><div class="v">' + esc(x.it.d) + '</div><div class="m">' + esc(x.it.i) + (x.s ? ' · سيريال: ' + esc(x.s) : '') + '</div></div>').join('') +
+    ? remRows(list.slice(0, MAX)) +
       (list.length > MAX ? '<p class="note">ظاهر أول ' + MAX + ' من ' + list.length + '، استخدم البحث.</p>' : '')
     : '<p class="note">' + (all.length ? 'مفيش نتايج للبحث.' : 'خلصت كل الأصناف ✅') + '</p>';
 }
@@ -411,7 +425,7 @@ function openRem(keys) { remKeys = keys; $('remSearch').value = ''; $('rem').cla
 function renderProgAll() {
   if (!isValidCat(cat)) return;
   if (!$('pick').classList.contains('hide')) renderPickList();
-  if (!$('main').classList.contains('hide')) renderProgBox();
+  if (!$('main').classList.contains('hide')) { renderProgBox(); checkComplete(); }
   if (!$('rem').classList.contains('hide')) renderRem();
 }
 $('progBox').addEventListener('click', e => { if (e.target.closest('#remBtnMain') && isValidCat(cat)) openRem(selRules().map(ruleKey)); });
@@ -419,6 +433,54 @@ $('remSearch').addEventListener('input', renderRem);
 $('remRefresh').onclick = loadProgress;
 $('remClose').onclick = () => $('rem').classList.add('hide');
 setInterval(() => { if (emp && navigator.onLine && isValidCat(cat)) loadProgress(); }, 60000);
+
+/* ====== overall progress, personal counter, completion alert ====== */
+function overall() {
+  const seen = {}; let t = 0, d = 0;
+  cat.rules.forEach(r => unitsOf(r).forEach(x => { if (seen[x.k]) return; seen[x.k] = 1; t++; if (isDone(x.k)) d++; }));
+  return { t, d };
+}
+const todayStr = () => { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
+function myCount() { const c = LS.get('myCnt', null); return c && c.emp === emp && c.d === todayStr() ? c.n : 0; }
+function addCount(n) { if (n) LS.set('myCnt', { emp, d: todayStr(), n: Math.max(0, myCount() + n) }); }
+let announced = null;
+function toast(m) { const t = $('toast'); t.textContent = m; t.classList.remove('hide'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.add('hide'), 5000); }
+function fanfare() { [[660, 0], [880, 150], [1175, 300]].forEach(a => setTimeout(() => beep(a[0], 170), a[1])); }
+function celebrate(r) {
+  toast(r === 'all' ? '🎉 خلصت كل التصنيفات المختارة، تمام!' : '✅ خلّصت: ' + ruleLabel(r));
+  fanfare(); if (navigator.vibrate) navigator.vibrate([120, 60, 120, 60, 240]);
+}
+function checkComplete() {
+  if (!isValidCat(cat) || $('main').classList.contains('hide')) return;
+  const fin = {}; let all = true, any = false;
+  selRules().forEach(r => { const p = progOf(r); if (p.total > 0) { any = true; if (p.done >= p.total) fin[ruleKey(r)] = r; else all = false; } });
+  if (announced === null) { announced = {}; Object.keys(fin).forEach(k => { announced[k] = 1; }); return; }
+  const fresh = Object.keys(fin).filter(k => !announced[k]);
+  Object.keys(announced).forEach(k => { if (!fin[k]) delete announced[k]; });
+  fresh.forEach(k => { announced[k] = 1; });
+  if (fresh.length) celebrate(all && any ? 'all' : fin[fresh[0]]);
+}
+/* ====== theme ====== */
+function applyTheme() {
+  const l = LS.get('light', false), t = l ? '🌙 وضع داكن' : '☀️ وضع فاتح';
+  document.documentElement.classList.toggle('light', l);
+  $('themeBtn').textContent = t; $('themeBtn0').textContent = t;
+  const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = l ? '#f3f4f6' : '#111827';
+}
+function flipTheme(e) { if (e) e.preventDefault(); LS.set('light', !LS.get('light', false)); applyTheme(); }
+$('themeBtn').onclick = flipTheme; $('themeBtn0').onclick = flipTheme;
+/* ====== remaining grouped by brand ====== */
+let remByBrand = LS.get('remByBrand', false);
+const brandOf = it => (it.b && String(it.b).trim()) || 'بدون براند';
+function remRows(l) {
+  const row = x => '<div class="it warn"><div class="v">' + esc(x.it.d) + '</div><div class="m">' + esc(x.it.i) + (x.s ? ' · سيريال: ' + esc(x.s) : '') + '</div></div>';
+  if (!remByBrand) return l.map(row).join('');
+  const cnt = {}; l.forEach(x => { const b = brandOf(x.it); cnt[b] = (cnt[b] || 0) + 1; });
+  let out = '', cur = null;
+  l.forEach(x => { const b = brandOf(x.it); if (b !== cur) { cur = b; out += '<div class="sub">' + esc(b) + ' (' + cnt[b] + ')</div>'; } out += row(x); });
+  return out;
+}
+$('remGroup').onclick = () => { remByBrand = !remByBrand; LS.set('remByBrand', remByBrand); renderRem(); };
 
 /* ====== feedback ====== */
 let actx = null;
@@ -447,13 +509,15 @@ function handleScan(value, qOverride) {
   const r = resolve(mode, value);
   const id = Date.now() + '-' + Math.random().toString(36).slice(2, 7);
   const finalQty = r.status === 'Duplicate serial' || r.status === 'Needs serial' ? 0 : (r.serial ? 1 : q);
+  addCount(finalQty);
   const entry = { id, ts: Date.now(), type: mode, value, qty: q };
   queue.push(entry); LS.set('queue', queue);
   if (r.serial && r.status !== 'Duplicate serial') { seenSerials[r.serial.toUpperCase()] = 1; LS.set('seenSerials', seenSerials); }
   const kind = STATUS[r.status][1];
   feedback(kind);
   const row = { id, serial: r.serial || '', value, desc: r.item ? r.item.d : '', qty: finalQty, status: r.status, kind, wait: true, mode };
-  if (r.item && finalQty > 0) { row.key = r.item.i.toUpperCase() + '|' + (r.serial ? r.serial.toUpperCase() : ''); localDone[row.key] = 1; renderProgAll(); }
+  if (r.item && finalQty > 0) { row.key = r.item.i.toUpperCase() + '|' + (r.serial ? r.serial.toUpperCase() : ''); localDone[row.key] = 1; }
+  renderProgAll();
   recent.unshift(row); if (recent.length > 40) recent.pop();
   lastScan = { value, type: mode };
   showRes(row, r);
@@ -505,7 +569,7 @@ async function doLink(target) {
     seenSerials[t.s.toUpperCase()] = 1; LS.set('seenSerials', seenSerials);
     localDone[t.item.i.toUpperCase() + '|' + t.s.toUpperCase()] = 1; renderProgAll();
     const row = recent.find(x => x.id === m.id);
-    if (row) { row.status = dup ? 'Duplicate serial' : 'OK'; row.kind = dup ? 'warn' : ''; row.qty = dup ? 0 : 1; row.desc = t.item.d; renderList(); }
+    if (row) { row.status = dup ? 'Duplicate serial' : 'OK'; row.kind = dup ? 'warn' : ''; addCount((dup ? 0 : 1) - row.qty); row.qty = dup ? 0 : 1; row.desc = t.item.d; renderList(); }
     feedback(dup ? 'warn' : '');
     $('res').innerHTML = '<b>اتربط ✓</b><small>' + esc(m.value) + ' ← ' + esc(t.s) + '</small><small>' + esc(t.item.d) + (dup ? ' · الجهاز ده اتعد قبل كده (مش هيتعد تاني)' : ' · اتحسب 1') + '</small>';
   } catch (e) { feedback('bad'); $('res').innerHTML = '<span class="note">فشل الربط: ' + esc(e.message) + '</span>'; }
@@ -533,6 +597,7 @@ function undoLast() {
   const row = recent.find(x => !x.undone);
   if (!row) return;
   row.undone = true;
+  if (row.qty > 0) addCount(-row.qty);
   if (row.key && !recent.some(x => x !== row && x.key === row.key)) { delete localDone[row.key]; delete srvDone[row.key]; renderProgAll(); }
   recent = recent.filter(x => x !== row);
   if (row.serial) { delete seenSerials[row.serial.toUpperCase()]; LS.set('seenSerials', seenSerials); }
@@ -559,7 +624,7 @@ async function flush() {
         const x = done[row.id];
         if (x) {
           row.wait = false;
-          if (x.status !== row.status && !(row.status === 'Other category' && x.status === 'OK')) { row.status = x.status; row.kind = STATUS[x.status] ? STATUS[x.status][1] : 'warn'; row.qty = x.qty; }
+          if (x.status !== row.status && !(row.status === 'Other category' && x.status === 'OK')) { row.status = x.status; row.kind = STATUS[x.status] ? STATUS[x.status][1] : 'warn'; addCount(x.qty - row.qty); row.qty = x.qty; }
         }
       });
     }
@@ -693,6 +758,7 @@ $('pickGo').onclick = () => {
   if (!myRules.length) myRules = cat.rules.map(ruleKey);
   LS.set('myRules', myRules);
   $('pick').classList.add('hide'); $('main').classList.remove('hide');
+  announced = null;
   renderMode(); renderQty(); renderList(); renderScope(); renderProgAll(); startCam();
 };
 $('pickOut').onclick = () => { $('pick').classList.add('hide'); $('login').classList.remove('hide'); };
@@ -991,6 +1057,7 @@ document.querySelectorAll('.logoImg').forEach(i => {
   i.src = 'logo.png';
 });
 
+applyTheme();
 if (cat && !isValidCat(cat)) {
   cat = null;
   LS.set('cat', null);
