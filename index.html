@@ -129,13 +129,9 @@ html.light .kpi .g b{color:#15803d}html.light .kpi .w b{color:#b45309}html.light
     <button id="camBtn">إيقاف الكاميرا</button>
     <button id="torchBtn">كشاف</button>
   </div>
+  <div class="row"><button class="pri" id="ocrBtn">🔢 اقرأ الرقم المطبوع بالكاميرا (لو الباركود تالف)</button></div>
 
   <div id="res"><span class="note">وجّه الكاميرا على الباركود</span></div>
-
-  <div class="row seg">
-    <button id="mCode">كود</button>
-    <button id="mSerial">سيريال</button>
-  </div>
 
   <div class="note">الكمية للسكان الجاي (ترجع 1 بعد كل سكان)</div>
   <div class="chips" id="qtyChips"></div>
@@ -255,7 +251,7 @@ async function apiGet(q) {
 
 /* ====== state ====== */
 let emp = LS.get('emp', '');
-let mode = LS.get('mode', 'code');
+let mode = 'code'; // auto: the app detects code vs serial by itself
 let qty = 1, keepQty = false;
 let cat = LS.get('cat', null);
 let myRules = LS.get('myRules', []);
@@ -518,7 +514,8 @@ function handleScan(value, qOverride) {
   const id = Date.now() + '-' + Math.random().toString(36).slice(2, 7);
   const finalQty = r.status === 'Duplicate serial' || r.status === 'Needs serial' ? 0 : (r.serial ? 1 : q);
   addCount(finalQty);
-  const entry = { id, ts: Date.now(), type: mode, value, qty: q };
+  const type = r.serial ? 'serial' : mode;
+  const entry = { id, ts: Date.now(), type, value, qty: q };
   queue.push(entry); LS.set('queue', queue);
   if (r.serial && r.status !== 'Duplicate serial') { seenSerials[r.serial.toUpperCase()] = 1; LS.set('seenSerials', seenSerials); }
   const kind = STATUS[r.status][1];
@@ -527,7 +524,7 @@ function handleScan(value, qOverride) {
   if (r.item && finalQty > 0) { row.key = r.item.i.toUpperCase() + '|' + (r.serial ? r.serial.toUpperCase() : ''); localDone[row.key] = 1; }
   renderProgAll();
   recent.unshift(row); if (recent.length > 40) recent.pop();
-  lastScan = { value, type: mode };
+  lastScan = { value, type };
   showRes(row, r);
   if (r.status === 'Not in system') showLinkOptions(row, value);
   renderList();
@@ -694,11 +691,7 @@ async function toggleTorch() {
 }
 
 /* ====== UI wiring ====== */
-function renderMode() {
-  $('mCode').classList.toggle('on', mode === 'code');
-  $('mSerial').classList.toggle('on', mode === 'serial');
-  LS.set('mode', mode);
-}
+function renderMode() {}
 function renderQty() {
   const opts = [1, 2, 3, 5, 10];
   $('qtyChips').innerHTML = opts.map(n => '<span class="chip' + (qty === n ? ' on' : '') + '" data-q="' + n + '">' + n + '</span>').join('');
@@ -708,8 +701,6 @@ function renderQty() {
 $('qtyChips').addEventListener('click', e => { const q = e.target.dataset.q; if (q) { qty = Number(q); renderQty(); } });
 $('qtyCustom').addEventListener('input', e => { const n = Math.floor(Number(e.target.value)); if (n >= 1) { qty = n; renderQty(); } });
 $('keepBtn').onclick = () => { keepQty = !keepQty; renderQty(); };
-$('mCode').onclick = () => { mode = 'code'; renderMode(); };
-$('mSerial').onclick = () => { mode = 'serial'; renderMode(); };
 $('camBtn').onclick = () => camOn ? stopCam() : startCam();
 $('torchBtn').onclick = toggleTorch;
 $('addBtn').onclick = () => { const v = $('manual').value; $('manual').value = ''; handleScan(v); };
@@ -981,6 +972,71 @@ $('srBody').addEventListener('keydown', e => {
     if (l.length === 1 && !isDone(id + '|' + l[0].toUpperCase())) { scanAs('serial', l[0], 1); srAfter(); $('srSerQ').value = ''; renderSerList(); }
   }
 });
+
+/* ====== OCR: read the printed number under a damaged barcode ====== */
+let ocrWorker = null, ocrBusy = false, tessLoad = null;
+function loadTess() {
+  if (window.Tesseract) return Promise.resolve();
+  if (tessLoad) return tessLoad;
+  tessLoad = new Promise((ok, no) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+    s.onload = ok; s.onerror = () => { tessLoad = null; no(new Error('load')); };
+    document.head.appendChild(s);
+  });
+  return tessLoad;
+}
+function frameCanvas() {
+  const v = $('vid'), vw = v.videoWidth, vh = v.videoHeight;
+  if (!vw || !vh) return null;
+  const ca = 4 / 3, va = vw / vh;
+  let sx = 0, sy = 0, sw = vw, sh = vh;
+  if (va > ca) { sw = vh * ca; sx = (vw - sw) / 2; } else { sh = vw / ca; sy = (vh - sh) / 2; }
+  const x = sx + sw * 0.08, y = sy + sh * 0.25, w = sw * 0.84, hh = sh * 0.5;
+  const sc = Math.max(1, 1400 / w), c = document.createElement('canvas');
+  c.width = Math.round(w * sc); c.height = Math.round(hh * sc);
+  const g = c.getContext('2d');
+  try { g.filter = 'grayscale(1) contrast(1.7)'; } catch (e) {}
+  g.drawImage(v, x, y, w, hh, 0, 0, c.width, c.height);
+  return c;
+}
+function ocrCandidates(text) {
+  const out = [], seen = {};
+  const add = t => { t = t.replace(/[^A-Z0-9\-\/]/g, ''); if (t.length >= 5 && !seen[t]) { seen[t] = 1; out.push(t); } };
+  String(text || '').toUpperCase().split(/\n+/).forEach(line => {
+    add(line.replace(/\s+/g, ''));
+    line.split(/\s+/).forEach(add);
+  });
+  const extra = [];
+  out.forEach(t => { const n = t.replace(/O/g, '0').replace(/[IL]/g, '1').replace(/S/g, '5').replace(/B/g, '8'); if (n !== t && /^[0-9\-\/]+$/.test(n) && !seen[n]) { seen[n] = 1; extra.push(n); } });
+  return out.concat(extra).sort((a, b) => b.length - a.length);
+}
+async function readPrinted() {
+  if (ocrBusy || !isValidCat(cat)) return;
+  if (!camOn) { $('res').innerHTML = '<span class="note">شغّل الكاميرا الأول ووجّهها على الرقم المطبوع جوه الإطار.</span>'; return; }
+  const cv = frameCanvas();
+  if (!cv) { $('res').innerHTML = '<span class="note">الكاميرا لسه مجهزتش، جرّب تاني.</span>'; return; }
+  ocrBusy = true; $('ocrBtn').disabled = true;
+  try {
+    $('res').innerHTML = '<span class="note">جاري قراءة الرقم... (أول مرة بيحمّل أداة القراءة ومحتاج نت)</span>';
+    await loadTess();
+    if (!ocrWorker) {
+      ocrWorker = await Tesseract.createWorker('eng');
+      await ocrWorker.setParameters({ tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-/', tessedit_pageseg_mode: '6' });
+    }
+    const r = await ocrWorker.recognize(cv);
+    const cands = ocrCandidates(r.data && r.data.text);
+    if (!cands.length) { feedback('warn'); $('res').innerHTML = '<span class="note">مقدرتش أقرا رقم. قرّب الكاميرا من الرقم وخليه جوه الإطار، أو استخدم البحث.</span>'; return; }
+    const hit = cands.find(t => resolve(mode, t).item);
+    if (hit) { handleScan(hit); return; }
+    feedback('warn');
+    $('res').innerHTML = '<b>' + esc(cands[0]) + '</b><small>اتقرا لكن مش مطابق لأي صنف. هفتحلك البحث بيه.</small>';
+    openSearch(); $('srQ').value = cands[0]; renderSr();
+  } catch (e) {
+    $('res').innerHTML = '<span class="note">القراءة فشلت: اتأكد من النت وجرّب تاني، أو استخدم البحث.</span>';
+  } finally { ocrBusy = false; $('ocrBtn').disabled = false; }
+}
+$('ocrBtn').onclick = readPrinted;
 
 /* ====== admin report ====== */
 let lastRep = null;
