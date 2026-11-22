@@ -68,6 +68,10 @@ details.grp{background:var(--card);border-radius:12px;margin:8px 0;padding:10px}
 details.grp summary{cursor:pointer;font-size:15px;line-height:1.7}
 details.grp .pbar{margin:6px 0}
 .sub{margin:8px 0 4px;font-weight:bold;font-size:13px}
+.it[data-id],.it[data-ser]{cursor:pointer}
+.it.dim{opacity:.45;pointer-events:none}
+.tag{display:inline-block;padding:2px 8px;border-radius:999px;background:#374151;font-size:11px;margin-inline-start:6px}
+.tag.warn{background:var(--warn)}.tag.ok{background:#14532d}
 </style>
 </head>
 <body>
@@ -129,6 +133,7 @@ details.grp .pbar{margin:6px 0}
     <button id="keepBtn">ثبّت الكمية</button>
   </div>
 
+  <div class="row"><button id="srBtn">🔍 بحث بالاسم / الرقم المطبوع (لو الباركود بايظ)</button></div>
   <div class="row">
     <input id="manual" type="text" autocomplete="off" placeholder="اكتب الكود/السيريال واضغط Enter">
     <button id="addBtn" style="flex:0 0 auto">+</button>
@@ -137,6 +142,16 @@ details.grp .pbar{margin:6px 0}
   <div class="row"><button id="adminBtn">أدمن</button></div>
 
   <div id="list"></div>
+</section>
+
+<!-- Search by name -->
+<section id="srch" class="modal hide" style="z-index:11">
+  <h1>🔍 بحث عن صنف</h1>
+  <p class="note">اكتب جزء من الاسم أو الكود أو آخر أرقام السيريال المطبوعة. ممكن أكتر من كلمة (مثال: A15 128).</p>
+  <input id="srQ" type="text" autocomplete="off" placeholder="اسم / كود / سيريال">
+  <div id="srMsg" class="note"></div>
+  <div id="srBody"></div>
+  <div class="row"><button class="pri" id="srClose">رجوع للسكان</button></div>
 </section>
 
 <!-- Remaining items -->
@@ -792,6 +807,106 @@ $('clrBtn').onclick = async () => {
   const r = await adm({ action: 'clearScans' }, () => 'اتمسحت ✓');
   if (r) { seenSerials = {}; LS.set('seenSerials', {}); recent = []; renderList(); }
 };
+
+/* ====== search by name (damaged barcode) ====== */
+let srSel = null, srQty = 1, srT = null, srIdx = null, srFor = null, srWasCam = false;
+function normQ(s) { return String(s || '').replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).toUpperCase().trim(); }
+function srBuild() {
+  if (srFor !== cat) { srIdx = cat.items.map(it => ({ it, h: (it.d + ' ' + it.i + ' ' + it.s.join(' ')).toUpperCase() })); srFor = cat; }
+}
+function scanAs(type, value, q) { const m = mode; mode = type; try { handleScan(value, q); } finally { mode = m; } }
+function itemBadge(it) {
+  if (!it.y) return ['خارج الجرد', 'warn'];
+  if (!inRules(cat.rules, it)) return ['مش جرد النهارده', 'warn'];
+  const mine = cat.rules.filter(x => myRules.indexOf(ruleKey(x)) >= 0);
+  if (mine.length && !inRules(mine, it)) return ['تصنيف تاني', 'warn'];
+  return ['', ''];
+}
+function itemProg(it) {
+  const id = it.i.toUpperCase();
+  if (it.s.length) { let d = 0; it.s.forEach(s => { if (isDone(id + '|' + s.toUpperCase())) d++; }); return { txt: d + '/' + it.s.length, ok: d >= it.s.length }; }
+  return isDone(id + '|') ? { txt: '✅ اتعد', ok: true } : { txt: it.o !== undefined ? 'مطلوب ' + it.o : '', ok: false };
+}
+function srTokens() { return normQ($('srQ').value).split(/\s+/).filter(Boolean); }
+function openSearch() {
+  if (!isValidCat(cat)) return;
+  linkMode = null; srWasCam = camOn; stopCam();
+  srSel = null; $('srMsg').textContent = ''; $('srch').classList.remove('hide');
+  renderSr(); setTimeout(() => $('srQ').focus(), 50);
+}
+function closeSearch() { $('srch').classList.add('hide'); if (srWasCam) startCam(); }
+function renderSr() {
+  if (!isValidCat(cat)) return;
+  const body = $('srBody');
+  if (srSel) {
+    const it = srSel, b = itemBadge(it), p = itemProg(it);
+    let h = '<div class="row"><button data-sr="back">← رجوع للنتائج</button></div>' +
+      '<div class="it ' + (p.ok ? '' : 'warn') + '"><div class="v">' + esc(it.d) + '</div><div class="m">' + esc(it.i) + ' · ' + esc(catLabel(it.c)) + (b[0] ? '<span class="tag warn">' + b[0] + '</span>' : '') + '</div><div class="m">' + p.txt + '</div></div>';
+    if (it.s.length) {
+      h += '<input id="srSerQ" type="text" autocomplete="off" placeholder="فلتر السيريال (آخر أرقام)"><div id="srSerList"></div>';
+      body.innerHTML = h; renderSerList();
+    } else {
+      h += '<div class="note">الكمية:</div><div class="chips" id="srChips">' + [1, 2, 3, 5, 10].map(n => '<span class="chip' + (srQty === n ? ' on' : '') + '" data-sq="' + n + '">' + n + '</span>').join('') + '</div>' +
+        '<div class="row"><input id="srQty" type="number" inputmode="numeric" min="1" placeholder="كمية تانية"><button class="pri" data-sr="add">سجّل</button></div>';
+      body.innerHTML = h;
+    }
+    return;
+  }
+  const toks = srTokens();
+  if (toks.join('').length < 2) { body.innerHTML = '<p class="note">اكتب حرفين على الأقل.</p>'; return; }
+  srBuild();
+  const res = [];
+  for (let i = 0; i < srIdx.length && res.length < 40; i++) { const e = srIdx[i]; if (toks.every(t => e.h.indexOf(t) >= 0)) res.push(e.it); }
+  if (!res.length) { body.innerHTML = '<p class="note">مفيش نتايج.</p>'; return; }
+  body.innerHTML = res.map(it => {
+    const b = itemBadge(it), p = itemProg(it);
+    const ms = it.s.length ? it.s.filter(s => toks.some(t => s.toUpperCase().indexOf(t) >= 0)).slice(0, 2) : [];
+    return '<div class="it ' + (p.ok ? '' : 'warn') + '" data-id="' + esc(it.i) + '"><div class="v">' + esc(it.d) + '</div><div class="m">' + esc(it.i) + (b[0] ? '<span class="tag warn">' + b[0] + '</span>' : '') + (p.ok ? '<span class="tag ok">' + p.txt + '</span>' : '') + '</div>' +
+      '<div class="m">' + (p.ok ? '' : p.txt) + (ms.length ? ' · سيريال: ' + ms.map(esc).join(' , ') : '') + '</div></div>';
+  }).join('') + (res.length >= 40 ? '<p class="note">ظاهر أول 40 نتيجة، زوّد كلمات البحث.</p>' : '');
+}
+function srSerials() {
+  const t = normQ($('srSerQ') ? $('srSerQ').value : '').split(/\s+/).filter(Boolean);
+  return srSel.s.filter(s => t.every(x => s.toUpperCase().indexOf(x) >= 0));
+}
+function renderSerList() {
+  const l = srSerials(), id = srSel.i.toUpperCase(), MAX = 100;
+  $('srSerList').innerHTML = l.length
+    ? l.slice(0, MAX).map(s => { const d = isDone(id + '|' + s.toUpperCase()); return '<div class="it ' + (d ? 'dim' : 'warn') + '" data-ser="' + esc(s) + '"><div class="v">' + esc(s) + '</div><div class="m">' + (d ? '✅ اتعد' : 'اضغط للعد') + '</div></div>'; }).join('') +
+      (l.length > MAX ? '<p class="note">ظاهر أول ' + MAX + ' من ' + l.length + '، اكتب آخر أرقام السيريال.</p>' : '')
+    : '<p class="note">مفيش سيريال بالشكل ده.</p>';
+}
+function srAfter() {
+  const r = recent[0];
+  if (r) { $('srMsg').textContent = (r.desc ? r.desc.slice(0, 40) + ' × ' : '') + r.qty + ' · ' + STATUS[r.status][0]; $('srMsg').style.color = r.kind === 'bad' ? '#f87171' : r.kind === 'warn' ? '#fbbf24' : '#4ade80'; }
+}
+$('srBtn').onclick = openSearch;
+$('srClose').onclick = closeSearch;
+$('srQ').addEventListener('input', () => { clearTimeout(srT); srT = setTimeout(() => { srSel = null; renderSr(); }, 150); });
+$('srBody').addEventListener('click', e => {
+  const t = e.target;
+  const sq = t.closest('[data-sq]'); if (sq) { srQty = Number(sq.dataset.sq); const c = $('srQty'); if (c) c.value = ''; $('srChips').querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x === sq)); return; }
+  const a = t.closest('[data-sr]');
+  if (a) {
+    if (a.dataset.sr === 'back') { srSel = null; renderSr(); }
+    else if (a.dataset.sr === 'add' && srSel) {
+      const c = Math.floor(Number($('srQty').value)), q = c >= 1 ? c : srQty;
+      scanAs('code', srSel.i, q); srAfter(); srQty = 1; srSel = null; renderSr();
+    }
+    return;
+  }
+  const ser = t.closest('[data-ser]');
+  if (ser && srSel) { scanAs('serial', ser.dataset.ser, 1); srAfter(); renderSerList(); return; }
+  const row = t.closest('[data-id]');
+  if (row) { const it = cat.byId[row.dataset.id.toUpperCase()]; if (it) { srSel = it; srQty = 1; renderSr(); } }
+});
+$('srBody').addEventListener('input', e => { if (e.target.id === 'srSerQ') renderSerList(); });
+$('srBody').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.id === 'srSerQ' && srSel) {
+    const l = srSerials(), id = srSel.i.toUpperCase();
+    if (l.length === 1 && !isDone(id + '|' + l[0].toUpperCase())) { scanAs('serial', l[0], 1); srAfter(); $('srSerQ').value = ''; renderSerList(); }
+  }
+});
 
 /* ====== admin report ====== */
 let lastRep = null;
