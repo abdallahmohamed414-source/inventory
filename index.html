@@ -278,7 +278,7 @@ const STATUS = {
 /* ====== catalog ====== */
 const DAYS = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 const ADM_DAYS = DAYS.concat(['Daily']);
-const DAY_AR = { Sat: 'السبت', Sun: 'الأحد', Mon: 'الاثنين', Tue: 'الثلاثاء', Wed: 'الأربعاء', Thu: 'الخميس', Fri: 'الجمعة', All: 'كل الأيام', Daily: 'يومي' };
+const DAY_AR = { Week: 'الأسبوع كله', Sat: 'السبت', Sun: 'الأحد', Mon: 'الاثنين', Tue: 'الثلاثاء', Wed: 'الأربعاء', Thu: 'الخميس', Fri: 'الجمعة', All: 'كل الأيام', Daily: 'يومي' };
 const catLabel = c => c === '(No category)' ? 'بدون كاتيجوري' : c;
 const icName = id => id + (cat && cat.icNames && cat.icNames[id] ? ' ' + cat.icNames[id] : '');
 const ruleKey = r => r.ic + '|' + r.c8 + '|' + (r.kw || '*');
@@ -304,13 +304,15 @@ function indexCat(c) {
   return c;
 }
 
+function saveCat() { const o = Object.assign({}, cat); delete o.byId; delete o.bySerial; LS.set('cat', o); }
+
 async function loadCatalog() {
   try {
-    const c = await apiGet('action=catalog');
-    if (c && c.ok && isValidCat(c)) { cat = c; LS.set('cat', c); }
+    const c = await apiGet('action=catalog' + (isValidCat(cat) && cat.ver ? '&since=' + encodeURIComponent(cat.ver) : ''));
+    if (c && c.ok && !c.same && isValidCat(c)) { cat = c; LS.set('cat', c); }
   } catch (e) { /* offline: use cached */ }
   if (isValidCat(cat)) {
-    indexCat(cat);
+    if (!cat.byId) indexCat(cat);
   } else {
     cat = null;
   }
@@ -351,7 +353,13 @@ function resolve(type, value) {
 let srvDone = {}, localDone = {}, progAt = '', progT = null, remKeys = [];
 const isDone = k => !!(srvDone[k] || localDone[k]);
 const selRules = () => { const s = cat.rules.filter(r => myRules.indexOf(ruleKey(r)) >= 0); return s.length ? s : cat.rules; };
+let unitCache = {}, unitCacheFor = null;
 function unitsOf(r) {
+  if (unitCacheFor !== cat) { unitCache = {}; unitCacheFor = cat; }
+  const k = ruleKey(r);
+  return unitCache[k] || (unitCache[k] = unitsCompute(r));
+}
+function unitsCompute(r) {
   const out = [];
   cat.items.forEach(it => {
     if (!it.y || !inRules([r], it)) return;
@@ -564,7 +572,7 @@ async function doLink(target) {
   try {
     const r = await apiPost({ action: 'link', emp, alias: m.value, serial: t.s });
     if (!r.ok) throw new Error(r.error);
-    cat.links = cat.links || {}; cat.links[m.value.toUpperCase()] = t.s.toUpperCase(); LS.set('cat', cat);
+    cat.links = cat.links || {}; cat.links[m.value.toUpperCase()] = t.s.toUpperCase(); saveCat();
     const dup = !!seenSerials[t.s.toUpperCase()];
     seenSerials[t.s.toUpperCase()] = 1; LS.set('seenSerials', seenSerials);
     localDone[t.item.i.toUpperCase() + '|' + t.s.toUpperCase()] = 1; renderProgAll();
@@ -801,7 +809,7 @@ function renderAdmin() {
   $('selIc').innerHTML = '<option value="*">كل الـ Inventory Classes</option>' + cat.ics.map(x => '<option value="' + esc(x.id) + '">' + esc(icName(x.id)) + ' (' + x.count + ')</option>').join('');
   $('selIc').disabled = !cat.ics.length;
   $('selC8').innerHTML = '<option value="*">كل الأصناف (Class 8)</option>' + cat.classes.map(c => '<option value="' + esc(c.name) + '">' + esc(catLabel(c.name)) + ' (' + c.count + ')</option>').join('');
-  $('selRepDay').innerHTML = '<option value="">اليوم الحالي</option>' + ADM_DAYS.map(d => '<option value="' + d + '">' + DAY_AR[d] + '</option>').join('');
+  $('selRepDay').innerHTML = '<option value="">اليوم الحالي</option><option value="Week">الأسبوع كله</option>' + ADM_DAYS.map(d => '<option value="' + d + '">' + DAY_AR[d] + '</option>').join('');
   $('selDay').innerHTML = '<option value="">تلقائي (النهارده)</option>' + DAYS.map(d => '<option value="' + d + '">' + DAY_AR[d] + '</option>').join('');
 }
 
@@ -988,6 +996,7 @@ function repText(R, full) {
   L.push('📊 تقرير جرد Dream 2000 - Seyouf');
   L.push('اليوم: ' + repDayName(R) + ' | آخر استوك: ' + (R.stockAt || '—'));
   L.push('التقدم: ' + T.done + '/' + T.units + ' (' + pct(T.done, T.units) + '%)');
+  if (R.day === 'Week' && R.days.length) L.push('حسب اليوم: ' + R.days.map(d => (DAY_AR[d.d] || d.d) + ' ' + d.done + '/' + d.total).join(' | '));
   L.push('✅ مطابق: ' + T.match + ' | ❌ عجز: ' + T.short + ' (' + T.shortQty + ' قطعة، منها ' + T.uncounted + ' لم يُجرد) | ⚠️ زيادة: ' + T.over + ' (' + T.overQty + ' قطعة)');
   L.push('');
   L.push('— حسب التصنيف —');
