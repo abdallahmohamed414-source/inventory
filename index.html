@@ -151,6 +151,15 @@ html.light .kpi .g b{color:#15803d}html.light .kpi .w b{color:#b45309}html.light
   <div id="list"></div>
 </section>
 
+<!-- Brand picker -->
+<section id="brSel" class="modal hide" style="z-index:11">
+  <h1 id="brTitle"></h1>
+  <p class="note">اختار براند واحد أو أكتر جوه التصنيف ده. لو ما اخترتش حاجة، هتجرد كل البراندات.</p>
+  <input id="brSearch" type="text" autocomplete="off" placeholder="ابحث عن براند">
+  <div class="row"><button id="brAll">الكل (مسح الاختيار)</button><button class="pri" id="brDone">تم</button></div>
+  <div id="brList"></div>
+</section>
+
 <!-- Search by name -->
 <section id="srch" class="modal hide" style="z-index:11">
   <h1>🔍 بحث عن صنف</h1>
@@ -255,6 +264,7 @@ let mode = 'code'; // auto: the app detects code vs serial by itself
 let qty = 1, keepQty = false;
 let cat = LS.get('cat', null);
 let myRules = LS.get('myRules', []);
+let myBrands = LS.get('myBrands', {});
 let queue = LS.get('queue', []);
 let undoQ = LS.get('undoQ', []);
 let seenSerials = LS.get('seenSerials', {});
@@ -265,7 +275,7 @@ const STATUS = {
   'OK': ['تمام', ''],
   'Not in system': ['مش موجود في السيستم', 'bad'],
   'Out of scope': ['خارج الجرد (مش مجدول أو مستلزمات تشغيل)', 'warn'],
-  'Other category': ['من كاتيجوري تانية غير اللي اخترتها (اتحسب)', 'warn'],
+  'Other category': ['من كاتيجوري أو براند غير اللي اخترته (اتحسب)', 'warn'],
   'Not today': ['مش من جرد النهارده (اتحسب)', 'warn'],
   'Duplicate serial': ['سيريال متكرر (اتسكن قبل كده)', 'warn'],
   'Needs serial': ['الصنف ده بسيريال: اسكان السيريال', 'warn']
@@ -318,7 +328,7 @@ async function loadCatalog() {
 function renderScope() {
   if (!isValidCat(cat)) { $('scopeLbl').textContent = 'مفيش بيانات: اتأكد من النت'; return; }
   const sel = cat.rules.filter(r => myRules.indexOf(ruleKey(r)) >= 0);
-  $('scopeLbl').textContent = 'جرد ' + (DAY_AR[cat.day] || '') + ': ' + (sel.length ? sel : cat.rules).map(ruleLabel).join('، ');
+  $('scopeLbl').textContent = 'جرد ' + (DAY_AR[cat.day] || '') + ': ' + (sel.length ? sel : cat.rules).map(ruleLabelB).join('، ');
 }
 
 /* ====== resolve ====== */
@@ -338,8 +348,7 @@ function resolve(type, value) {
     if (!item.y) r.status = 'Out of scope';
     else if (!inRules(cat.rules, item)) r.status = 'Not today';
     else {
-      const mine = cat.rules.filter(x => myRules.indexOf(ruleKey(x)) >= 0);
-      if (mine.length && !inRules(mine, item)) r.status = 'Other category';
+      if (!mineOk(item)) r.status = 'Other category';
     }
   }
   return r;
@@ -350,10 +359,18 @@ let srvDone = {}, localDone = {}, progAt = '', progT = null, remKeys = [];
 const isDone = k => !!(srvDone[k] || localDone[k]);
 const selRules = () => { const s = cat.rules.filter(r => myRules.indexOf(ruleKey(r)) >= 0); return s.length ? s : cat.rules; };
 let unitCache = {}, unitCacheFor = null;
-function unitsOf(r) {
+function unitsFull(r) {
   if (unitCacheFor !== cat) { unitCache = {}; unitCacheFor = cat; }
   const k = ruleKey(r);
   return unitCache[k] || (unitCache[k] = unitsCompute(r));
+}
+const brandsOfRule = r => myBrands[ruleKey(r)] || [];
+const brandOk = (r, it) => { const b = brandsOfRule(r); return !b.length || b.indexOf(brandOf(it)) >= 0; };
+function unitsOf(r) { const u = unitsFull(r), b = brandsOfRule(r); return b.length ? u.filter(x => b.indexOf(brandOf(x.it)) >= 0) : u; }
+const mineOk = it => { const mine = cat.rules.filter(x => myRules.indexOf(ruleKey(x)) >= 0); return !mine.length || mine.some(r => inRules([r], it) && brandOk(r, it)); };
+function ruleLabelB(r) {
+  const b = brandsOfRule(r);
+  return ruleLabel(r) + (b.length ? ' · 🏷 ' + b.slice(0, 2).join('، ') + (b.length > 2 ? ' +' + (b.length - 2) : '') : '');
 }
 function unitsCompute(r) {
   const out = [];
@@ -394,9 +411,11 @@ function scheduleProg() { clearTimeout(progT); progT = setTimeout(loadProgress, 
 function renderPickList() {
   $('pickList').innerHTML = cat.rules.map(r => {
     const p = progOf(r), fin = p.total > 0 && p.done >= p.total, left = p.total - p.done;
+    const nBr = brandCount(r);
     return '<div class="rule' + (myRules.indexOf(ruleKey(r)) >= 0 ? ' on' : '') + (fin ? ' done' : '') + '" data-k="' + esc(ruleKey(r)) + '">' +
-      '<span>' + (p.total ? (fin ? '✅ ' : '⏳ ') : '➖ ') + esc(ruleLabel(r)) + '</span><b>' + p.done + ' / ' + p.total + '</b>' +
+      '<span>' + (p.total ? (fin ? '✅ ' : '⏳ ') : '➖ ') + esc(ruleLabelB(r)) + '</span><b>' + p.done + ' / ' + p.total + '</b>' +
       '<div class="pbar"><i style="width:' + (p.total ? Math.round(p.done * 100 / p.total) : 0) + '%"></i></div>' +
+      (nBr > 1 ? '<button class="remBtn" data-br="' + esc(ruleKey(r)) + '">🏷 البراند (' + (brandsOfRule(r).length || 'الكل') + ')</button>' : '') +
       (left > 0 ? '<button class="remBtn" data-rem="' + esc(ruleKey(r)) + '">المتبقي (' + left + ')</button>' : '') + '</div>';
   }).join('');
 }
@@ -404,7 +423,7 @@ function renderProgBox() {
   const rs = selRules();
   const chips = rs.map(r => {
     const p = progOf(r), fin = p.total > 0 && p.done >= p.total;
-    return '<span class="pc' + (fin ? ' ok' : '') + '">' + (fin ? '✅ ' : '⏳ ') + esc(ruleLabel(r)) + ' ' + p.done + '/' + p.total + '</span>';
+    return '<span class="pc' + (fin ? ' ok' : '') + '">' + (fin ? '✅ ' : '⏳ ') + esc(ruleLabelB(r)) + ' ' + p.done + '/' + p.total + '</span>';
   }).join('');
   const left = remainingUnits(rs).length;
   const o = overall(), op = o.t ? Math.round(o.d * 100 / o.t) : 0;
@@ -417,7 +436,7 @@ function renderRem() {
   const list = (q ? all.filter(x => (x.it.d + ' ' + x.it.i + ' ' + x.s + ' ' + (x.it.b || '')).toUpperCase().indexOf(q) >= 0) : all.slice())
     .sort((a, b) => (remByBrand ? brandOf(a.it).localeCompare(brandOf(b.it)) : 0) || a.it.d.localeCompare(b.it.d));
   $('remGroup').textContent = remByBrand ? 'بدون تجميع' : 'تجميع بالبراند';
-  $('remTitle').textContent = rules.length === 1 ? ruleLabel(rules[0]) : 'المتبقي';
+  $('remTitle').textContent = rules.length === 1 ? ruleLabelB(rules[0]) : 'المتبقي';
   $('remNote').textContent = 'المتبقي: ' + all.length + ' · آخر تحديث من الشيت: ' + (progAt || '—');
   const MAX = 300;
   $('remList').innerHTML = list.length
@@ -441,7 +460,7 @@ setInterval(() => { if (emp && navigator.onLine && isValidCat(cat)) loadProgress
 /* ====== overall progress, personal counter, completion alert ====== */
 function overall() {
   const seen = {}; let t = 0, d = 0;
-  cat.rules.forEach(r => unitsOf(r).forEach(x => { if (seen[x.k]) return; seen[x.k] = 1; t++; if (isDone(x.k)) d++; }));
+  cat.rules.forEach(r => unitsFull(r).forEach(x => { if (seen[x.k]) return; seen[x.k] = 1; t++; if (isDone(x.k)) d++; }));
   return { t, d };
 }
 const todayStr = () => { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
@@ -451,7 +470,7 @@ let announced = null;
 function toast(m) { const t = $('toast'); t.textContent = m; t.classList.remove('hide'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.add('hide'), 5000); }
 function fanfare() { [[660, 0], [880, 150], [1175, 300]].forEach(a => setTimeout(() => beep(a[0], 170), a[1])); }
 function celebrate(r) {
-  toast(r === 'all' ? '🎉 خلصت كل التصنيفات المختارة، تمام!' : '✅ خلّصت: ' + ruleLabel(r));
+  toast(r === 'all' ? '🎉 خلصت كل التصنيفات المختارة، تمام!' : '✅ خلّصت: ' + ruleLabelB(r));
   fanfare(); if (navigator.vibrate) navigator.vibrate([120, 60, 120, 60, 240]);
 }
 function checkComplete() {
@@ -732,6 +751,7 @@ function showPick() {
   if (!isValidCat(cat)) return;
   $('main').classList.add('hide'); $('pick').classList.remove('hide');
   myRules = myRules.filter(k => cat.rules.some(r => ruleKey(r) === k));
+  Object.keys(myBrands).forEach(k => { if (!cat.rules.some(r => ruleKey(r) === k)) delete myBrands[k]; });
   $('pickDay').textContent = cat.day === 'All' ? 'الجرد' : 'جرد يوم ' + (DAY_AR[cat.day] || cat.day);
   $('pickNote').textContent = 'آخر استوك: ' + (cat.stockAt || 'غير معروف');
   if (!cat.rules.length) {
@@ -744,6 +764,8 @@ function showPick() {
 }
 
 $('pickList').addEventListener('click', e => {
+  const bb = e.target.closest('[data-br]');
+  if (bb) { openBrands(bb.dataset.br); return; }
   const rb = e.target.closest('[data-rem]');
   if (rb) { openRem([rb.dataset.rem]); return; }
   const el = e.target.closest('.rule'); if (!el) return;
@@ -751,11 +773,11 @@ $('pickList').addEventListener('click', e => {
   if (i >= 0) myRules.splice(i, 1); else myRules.push(k);
   el.classList.toggle('on');
 });
-$('pickAll').onclick = () => { if (isValidCat(cat)) { myRules = cat.rules.map(ruleKey); showPick(); } };
+$('pickAll').onclick = () => { if (isValidCat(cat)) { myRules = cat.rules.map(ruleKey); myBrands = {}; LS.set('myBrands', myBrands); showPick(); } };
 $('pickGo').onclick = () => {
   if (!isValidCat(cat)) return;
   if (!myRules.length) myRules = cat.rules.map(ruleKey);
-  LS.set('myRules', myRules);
+  LS.set('myRules', myRules); LS.set('myBrands', myBrands);
   $('pick').classList.add('hide'); $('main').classList.remove('hide');
   announced = null;
   renderMode(); renderQty(); renderList(); renderScope(); renderProgAll(); startCam();
@@ -883,8 +905,7 @@ function scanAs(type, value, q) { const m = mode; mode = type; try { handleScan(
 function itemBadge(it) {
   if (!it.y) return ['خارج الجرد', 'warn'];
   if (!inRules(cat.rules, it)) return ['مش جرد النهارده', 'warn'];
-  const mine = cat.rules.filter(x => myRules.indexOf(ruleKey(x)) >= 0);
-  if (mine.length && !inRules(mine, it)) return ['تصنيف تاني', 'warn'];
+  if (!mineOk(it)) return ['تصنيف/براند تاني', 'warn'];
   return ['', ''];
 }
 function itemProg(it) {
@@ -1037,6 +1058,41 @@ async function readPrinted() {
   } finally { ocrBusy = false; $('ocrBtn').disabled = false; }
 }
 $('ocrBtn').onclick = readPrinted;
+
+/* ====== brand picker inside a category ====== */
+let brKey = null;
+function brandCount(r) { const s = {}; unitsFull(r).forEach(x => { s[brandOf(x.it)] = 1; }); return Object.keys(s).length; }
+function brandStats(r) {
+  const m = {};
+  unitsFull(r).forEach(x => { const b = brandOf(x.it); const o = m[b] = m[b] || { b, t: 0, d: 0 }; o.t++; if (isDone(x.k)) o.d++; });
+  return Object.keys(m).map(k => m[k]).sort((a, b) => (b.t - b.d) - (a.t - a.d) || a.b.localeCompare(b.b));
+}
+function renderBrands() {
+  const r = cat.rules.find(x => ruleKey(x) === brKey); if (!r) return;
+  const q = $('brSearch').value.trim().toUpperCase(), sel = brandsOfRule(r);
+  $('brTitle').textContent = '🏷 ' + ruleLabel(r);
+  $('brList').innerHTML = brandStats(r).filter(x => !q || x.b.toUpperCase().indexOf(q) >= 0).map(x => {
+    const fin = x.d >= x.t;
+    return '<div class="rule' + (sel.indexOf(x.b) >= 0 ? ' on' : '') + (fin ? ' done' : '') + '" data-b="' + esc(x.b) + '"><span>' + (fin ? '✅ ' : '') + esc(x.b) + '</span><b>' + x.d + ' / ' + x.t + '</b>' +
+      '<div class="pbar"><i style="width:' + Math.round(x.d * 100 / x.t) + '%"></i></div></div>';
+  }).join('') || '<p class="note">مفيش نتايج.</p>';
+}
+function openBrands(k) { brKey = k; $('brSearch').value = ''; $('brSel').classList.remove('hide'); renderBrands(); }
+function closeBrands() {
+  $('brSel').classList.add('hide');
+  if (brKey && myBrands[brKey] && myBrands[brKey].length && myRules.indexOf(brKey) < 0) myRules.push(brKey);
+  LS.set('myBrands', myBrands); LS.set('myRules', myRules); renderPickList();
+}
+$('brList').addEventListener('click', e => {
+  const el = e.target.closest('[data-b]'); if (!el || !brKey) return;
+  const a = (myBrands[brKey] || []).slice(), b = el.dataset.b, i = a.indexOf(b);
+  if (i >= 0) a.splice(i, 1); else a.push(b);
+  if (a.length) myBrands[brKey] = a; else delete myBrands[brKey];
+  renderBrands();
+});
+$('brSearch').addEventListener('input', renderBrands);
+$('brAll').onclick = () => { if (brKey) { delete myBrands[brKey]; renderBrands(); } };
+$('brDone').onclick = closeBrands;
 
 /* ====== admin report ====== */
 let lastRep = null;
